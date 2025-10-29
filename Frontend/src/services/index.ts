@@ -1,0 +1,13 @@
+// Exportar todos los servicios
+export { authService } from './authService'
+export { financialSettingService } from './financialSettingService'
+export { incomeService } from './incomeService'
+export { expenseService } from './expenseService'
+export { categoryService } from './categoryService'
+export { accountService } from './accountService'
+export { savingsGoalService } from './savingsGoalService'
+export { savingsDepositService } from './savingsDepositService'
+export { loanService } from './loanService'
+export { spendingLimitService } from './spendingLimitService'
+export { summaryService } from './summaryService'
+export { getErrorMessage } from './api'
