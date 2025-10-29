@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { accountService, getErrorMessage } from '@/services'
-import type { Account, AccountType } from '@/types'
+import { accountService, currencyService, getErrorMessage } from '@/services'
+import type { Account, AccountType, Currency } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ import { Trash2, Edit, Plus } from 'lucide-react'
 
 export const AccountPage = () => {
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -27,7 +28,7 @@ export const AccountPage = () => {
     name: '',
     type: 'bank' as AccountType,
     balance: 0,
-    currency: 'USD',
+    currency_id: '',
     description: '',
   })
 
@@ -51,8 +52,21 @@ export const AccountPage = () => {
     }
   }
 
+  const fetchCurrencies = async () => {
+    try {
+      const currencies = await currencyService.getAll()
+      setCurrencies(currencies)
+      if (currencies.length > 0 && !formData.currency_id) {
+        setFormData(prev => ({ ...prev, currency_id: currencies[0].id }))
+      }
+    } catch (err) {
+      console.error(getErrorMessage(err))
+    }
+  }
+
   useEffect(() => {
     fetchAccounts()
+    fetchCurrencies()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,7 +101,7 @@ export const AccountPage = () => {
       name: account.name,
       type: account.type,
       balance: account.balance,
-      currency: account.currency,
+      currency_id: account.currency_id,
       description: account.description || '',
     })
     setEditingId(account.id)
@@ -99,7 +113,7 @@ export const AccountPage = () => {
       name: '',
       type: 'bank',
       balance: 0,
-      currency: 'USD',
+      currency_id: currencies.length > 0 ? currencies[0].id : '',
       description: '',
     })
     setEditingId(null)
@@ -123,7 +137,7 @@ export const AccountPage = () => {
       header: 'Balance',
       render: (item: Account) => (
         <span className="font-semibold">
-          {item.currency} {item.balance.toFixed(2)}
+          {item.currency?.code || 'USD'} {item.balance.toFixed(2)}
         </span>
       ),
     },
@@ -253,15 +267,23 @@ export const AccountPage = () => {
 
                 <div>
                   <Label htmlFor="currency">Moneda</Label>
-                  <Input
-                    id="currency"
-                    placeholder="USD"
-                    value={formData.currency}
-                    onChange={(e) =>
-                      setFormData({ ...formData, currency: e.target.value })
+                  <Select
+                    value={formData.currency_id}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, currency_id: value })
                     }
-                    required
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar moneda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencies.map((currency) => (
+                        <SelectItem key={currency.id} value={currency.id}>
+                          {currency.code} - {currency.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 

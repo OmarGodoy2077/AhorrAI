@@ -35,19 +35,19 @@ const validateIncome = [
     body('type').isIn(['fixed', 'variable', 'extra']).withMessage('Invalid type'),
     body('amount').isFloat({ gt: 0 }).withMessage('Amount must be greater than 0'),
     body('frequency').isIn(['monthly', 'weekly', 'one-time']).withMessage('Invalid frequency'),
-    body('currency_id').optional().isUUID().withMessage('Invalid currency ID'),
-    body('account_id').optional().isUUID().withMessage('Invalid account ID'),
+    body('currency_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid currency ID'),
+    body('account_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid account ID'),
     handleValidationErrors
 ];
 
 const validateExpense = [
-    body('description').isString().isLength({ min: 1, max: 200 }).withMessage('Description must be 1-200 characters'),
+    body('description').optional().isString().isLength({ max: 200 }).withMessage('Description must be ≤200 characters'),
     body('amount').isFloat({ gt: 0 }).withMessage('Amount must be greater than 0'),
-    body('date').isISO8601().withMessage('Invalid date'),
+    body('expense_date').isISO8601().withMessage('Invalid date'),
     body('type').isIn(['fixed', 'variable']).withMessage('Invalid type'),
-    body('account_id').optional().isUUID().withMessage('Invalid account ID'),
-    body('category_id').optional().isUUID().withMessage('Invalid category ID'),
-    body('currency_id').optional().isUUID().withMessage('Invalid currency ID'),
+    body('account_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid account ID'),
+    body('category_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid category ID'),
+    body('currency_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid currency ID'),
     handleValidationErrors
 ];
 
@@ -66,7 +66,7 @@ const validateAccount = [
     body('name').isString().isLength({ min: 1, max: 100 }).withMessage('Name must be 1-100 characters'),
     body('type').isIn(['cash', 'bank', 'platform']).withMessage('Invalid type'),
     body('balance').optional().isFloat({ gte: 0 }).withMessage('Balance must be non-negative'),
-    body('currency_id').optional().isUUID().withMessage('Invalid currency ID'),
+    body('currency_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid currency ID'),
     handleValidationErrors
 ];
 

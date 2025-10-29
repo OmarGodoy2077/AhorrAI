@@ -47,7 +47,7 @@ export interface FinancialSetting {
 // ========================================
 
 export type IncomeType = 'fixed' | 'variable' | 'extra'
-export type IncomeFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'one-time'
+export type IncomeFrequency = 'weekly' | 'monthly' | 'one-time'
 
 export interface Income {
   id: string
@@ -56,7 +56,12 @@ export interface Income {
   name: string
   type: IncomeType
   amount: number
-  currency: string
+  currency_id: string
+  currencies?: {
+    code: string
+    name: string
+    symbol: string
+  }
   frequency: IncomeFrequency
   is_confirmed: boolean
   income_date: string
@@ -75,9 +80,15 @@ export interface Expense {
   account_id?: string
   category_id?: string
   amount: number
-  currency: string
+  currency_id: string
+  currencies?: {
+    code: string
+    name: string
+    symbol: string
+  }
   expense_date: string
   description?: string
+  type?: 'fixed' | 'variable'
   created_at: string
   updated_at: string
   category?: Category
@@ -101,6 +112,18 @@ export interface Category {
 }
 
 // ========================================
+// Currency Types
+// ========================================
+
+export interface Currency {
+  id: string
+  code: string
+  name: string
+  symbol: string
+  created_at: string
+}
+
+// ========================================
 // Account Types
 // ========================================
 
@@ -112,10 +135,23 @@ export interface Account {
   name: string
   type: AccountType
   balance: number
-  currency: string
+  currency_id: string
+  currency?: {
+    code: string
+    name: string
+    symbol: string
+  }
   description?: string
   created_at: string
   updated_at: string
+}
+
+export interface Currency {
+  id: string
+  code: string
+  name: string
+  symbol: string
+  created_at: string
 }
 
 // ========================================
@@ -303,7 +339,7 @@ export interface AccountFormData {
   name: string
   type: AccountType
   balance: number
-  currency: string
+  currency_id: string
   description?: string
 }
 

@@ -25,7 +25,10 @@ const Account = {
         const { limit = 10, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
         let query = database
             .from('accounts')
-            .select('*')
+            .select(`
+                *,
+                currencies (code, name, symbol)
+            `)
             .eq('user_id', userId)
             .order(sortBy, { ascending: sortOrder === 'asc' })
             .range(offset, offset + limit - 1);
@@ -38,7 +41,10 @@ const Account = {
         const database = getDatabase();
         const { data: account, error } = await database
             .from('accounts')
-            .select('*')
+            .select(`
+                *,
+                currencies (code, name, symbol)
+            `)
             .eq('id', id)
             .single();
         if (error && error.code !== 'PGRST116') throw error;

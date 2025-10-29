@@ -4,6 +4,9 @@ const AccountController = {
     async createAccount(req, res) {
         try {
             const data = { ...req.body, user_id: req.user.userId };
+            if (data.currency_id === '') {
+                data.currency_id = null;
+            }
             const account = await Account.create(data);
             res.status(201).json(account);
         } catch (error) {
@@ -45,7 +48,11 @@ const AccountController = {
             if (!account || account.user_id !== req.user.userId) {
                 return res.status(404).json({ error: 'Account not found' });
             }
-            const updatedAccount = await Account.update(req.params.id, req.body);
+            const updates = { ...req.body };
+            if (updates.currency_id === '') {
+                updates.currency_id = null;
+            }
+            const updatedAccount = await Account.update(req.params.id, updates);
             res.json(updatedAccount);
         } catch (error) {
             res.status(500).json({ error: error.message });

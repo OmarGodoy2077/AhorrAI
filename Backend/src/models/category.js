@@ -10,6 +10,7 @@ function getDatabase() {
 
 const Category = {
     async create(data) {
+        const database = getDatabase();
         const { data: category, error } = await database
             .from('categories')
             .insert([data])
@@ -20,6 +21,7 @@ const Category = {
     },
 
     async findByUserId(userId, options = {}) {
+        const database = getDatabase();
         const { limit = 10, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
         let query = database
             .from('categories')
@@ -33,6 +35,7 @@ const Category = {
     },
 
     async findById(id) {
+        const database = getDatabase();
         const { data: category, error } = await database
             .from('categories')
             .select('*')
@@ -43,6 +46,7 @@ const Category = {
     },
 
     async findByIdAndUserId(id, userId) {
+        const database = getDatabase();
         const { data: category, error } = await database
             .from('categories')
             .select('*')
@@ -54,6 +58,7 @@ const Category = {
     },
 
     async update(id, updates) {
+        const database = getDatabase();
         const { data: category, error } = await database
             .from('categories')
             .update(updates)
@@ -65,6 +70,7 @@ const Category = {
     },
 
     async delete(id) {
+        const database = getDatabase();
         const { error } = await database
             .from('categories')
             .delete()

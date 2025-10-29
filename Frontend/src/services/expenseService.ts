@@ -9,9 +9,10 @@ export const expenseService = {
     account_id?: string
     category_id?: string
     amount: number
-    currency: string
+    currency_id: string
     expense_date: string
     description?: string
+    type: 'fixed' | 'variable'
   }): Promise<Expense> {
     const response = await api.post<Expense>('/expenses', data)
     return response.data

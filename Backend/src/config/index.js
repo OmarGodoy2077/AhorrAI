@@ -13,6 +13,7 @@ module.exports = {
     port: process.env.PORT || 3000,
     nodeEnv: process.env.NODE_ENV || 'development',
     timezone: process.env.TZ || 'America/Guatemala',
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
     // Supabase auth client (for authentication operations)
     supabaseAuth: dbConfig.auth
 };

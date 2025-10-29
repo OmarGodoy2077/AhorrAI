@@ -1,12 +1,16 @@
-﻿const config = require('../config');
-const database = config.database;
-
-if (!database) {
-    throw new Error('Database client not initialized. Check SUPABASE configuration.');
+﻿// Lazy load database to avoid circular dependency issues
+function getDatabase() {
+    const config = require('../config');
+    const db = config.database;
+    if (!db) {
+        throw new Error('Database client not initialized. Check SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in .env file.');
+    }
+    return db;
 }
 
 const Loan = {
     async create(data) {
+        const database = getDatabase();
         const { data: loan, error } = await database
             .from('loans')
             .insert([data])
@@ -17,6 +21,7 @@ const Loan = {
     },
 
     async findByUserId(userId, options = {}) {
+        const database = getDatabase();
         const { limit = 10, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
         let query = database
             .from('loans')
@@ -30,6 +35,7 @@ const Loan = {
     },
 
     async findById(id) {
+        const database = getDatabase();
         const { data: loan, error } = await database
             .from('loans')
             .select('*')
@@ -40,6 +46,7 @@ const Loan = {
     },
 
     async update(id, updates) {
+        const database = getDatabase();
         const { data: loan, error } = await database
             .from('loans')
             .update(updates)
@@ -51,6 +58,7 @@ const Loan = {
     },
 
     async delete(id) {
+        const database = getDatabase();
         const { error } = await database
             .from('loans')
             .delete()

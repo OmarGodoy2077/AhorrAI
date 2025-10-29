@@ -4,6 +4,12 @@ const IncomeController = {
     async createIncome(req, res) {
         try {
             const data = { ...req.body, user_id: req.user.userId };
+            if (data.account_id === '') {
+                data.account_id = null;
+            }
+            if (data.currency_id === '') {
+                data.currency_id = null;
+            }
             const income = await Income.create(data);
             res.status(201).json(income);
         } catch (error) {
@@ -15,8 +21,8 @@ const IncomeController = {
         try {
             const { page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'desc' } = req.query;
             const offset = (page - 1) * limit;
-            const incomes = await Income.findByUserId(req.user.userId, { limit: parseInt(limit), offset: parseInt(offset), sortBy, sortOrder });
-            res.json({ data: incomes, page: parseInt(page), limit: parseInt(limit) });
+            const result = await Income.findByUserId(req.user.userId, { limit: parseInt(limit), offset: parseInt(offset), sortBy, sortOrder });
+            res.json({ data: result.data, page: parseInt(page), limit: parseInt(limit), total: result.total });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -40,7 +46,14 @@ const IncomeController = {
             if (!income || income.user_id !== req.user.userId) {
                 return res.status(404).json({ error: 'Income not found' });
             }
-            const updatedIncome = await Income.update(req.params.id, req.body);
+            const updates = { ...req.body };
+            if (updates.account_id === '') {
+                updates.account_id = null;
+            }
+            if (updates.currency_id === '') {
+                updates.currency_id = null;
+            }
+            const updatedIncome = await Income.update(req.params.id, updates);
             res.json(updatedIncome);
         } catch (error) {
             res.status(500).json({ error: error.message });

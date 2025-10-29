@@ -5,8 +5,8 @@ import { useAuth } from '@/context/AuthContext'
 import { Wallet, TrendingDown, PiggyBank, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { Link } from 'react-router-dom'
-import api from '@/services/api'
-import type { MonthlySummary } from '@/types'
+import { expenseService, incomeService, accountService } from '@/services'
+import type { Expense, Income } from '@/types'
 
 export const DashboardPage = () => {
   const { user } = useAuth()
@@ -24,21 +24,39 @@ export const DashboardPage = () => {
         const currentMonth = new Date().getMonth() + 1
         const currentYear = new Date().getFullYear()
         
-        // Obtener resumen mensual
-        const response = await api.get<MonthlySummary>(`/summaries/monthly/${currentYear}/${currentMonth}`)
-        const summary = response.data
+        // Obtener todos los ingresos y gastos (con límite alto para el mes)
+        const [incomesResponse, expensesResponse, accountsResponse] = await Promise.all([
+          incomeService.getAll({ limit: 1000 }),
+          expenseService.getAll({ limit: 1000 }),
+          accountService.getAll({ limit: 100 })
+        ])
 
-        // Obtener cuentas para el balance total
-        const accountsResponse = await api.get('/accounts')
-        const accounts = accountsResponse.data.data || []
+        const incomes = incomesResponse.data
+        const expenses = expensesResponse.data
+        const accounts = accountsResponse.data
+
+        // Filtrar por mes actual
+        const currentMonthIncomes = incomes.filter((income: Income) => {
+          const date = new Date(income.created_at)
+          return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
+        })
+
+        const currentMonthExpenses = expenses.filter((expense: Expense) => {
+          const date = new Date(expense.expense_date)
+          return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
+        })
+
+        const totalIncome = currentMonthIncomes.reduce((sum: number, income: Income) => sum + income.amount, 0)
+        const totalExpenses = currentMonthExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0)
+
         // Definir el tipo para accounts
         const typedAccounts = accounts as Array<{ balance: number }>;
         const totalBalance = typedAccounts.reduce((sum: number, account) => sum + account.balance, 0)
 
         setStats({
-          totalIncome: summary?.total_income || 0,
-          totalExpenses: summary?.total_expenses || 0,
-          totalSavings: summary?.savings || 0,
+          totalIncome,
+          totalExpenses,
+          totalSavings: 0, // TODO: calcular ahorros
           accountBalance: totalBalance,
         })
       } catch (error) {
@@ -183,7 +201,7 @@ export const DashboardPage = () => {
                   <div
                     className="h-full bg-red-500"
                     style={{
-                      width: `${(stats.totalExpenses / stats.totalIncome) * 100}%`,
+                      width: stats.totalIncome > 0 ? `${(stats.totalExpenses / stats.totalIncome) * 100}%` : '0%',
                     }}
                   />
                 </div>

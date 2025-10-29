@@ -10,8 +10,8 @@ export const incomeService = {
     name: string
     type: 'fixed' | 'variable' | 'extra'
     amount: number
-    currency: string
-    frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'one-time'
+    currency_id: string
+    frequency: 'monthly' | 'weekly' | 'one-time'
     income_date: string
     description?: string
   }): Promise<Income> {

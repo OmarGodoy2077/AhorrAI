@@ -1,7 +1,7 @@
                 -- Schema for AhorraAI Backend
 -- Using Supabase PostgreSQL
 -- Last Updated: 2025-10-28
--- Migration 004: Fixed profile creation with database trigger
+-- Migration 010: Made expense description nullable
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -65,9 +65,12 @@ CREATE TABLE income_sources (
     type TEXT CHECK (type IN ('fixed', 'variable', 'extra')),
     amount DECIMAL(10,2) CHECK (amount >= 0),
     frequency TEXT CHECK (frequency IN ('monthly', 'weekly', 'one-time')),
+    income_date DATE DEFAULT CURRENT_DATE,
     currency_id UUID REFERENCES currencies(id) DEFAULT NULL,
+    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     is_confirmed BOOLEAN DEFAULT FALSE,
     confirmed_at TIMESTAMPTZ,
+    description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -89,6 +92,7 @@ CREATE TABLE accounts (
     type TEXT CHECK (type IN ('cash', 'bank', 'platform')),
     balance DECIMAL(10,2) DEFAULT 0 CHECK (balance >= 0),
     currency_id UUID REFERENCES currencies(id) DEFAULT NULL,
+    description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -114,6 +118,7 @@ CREATE TABLE categories (
     parent_category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     custom_label TEXT,
     color TEXT, -- For UI
+    description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -122,7 +127,7 @@ CREATE TABLE expenses (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-    description TEXT NOT NULL,
+    description TEXT,
     amount DECIMAL(10,2) CHECK (amount > 0),
     date DATE DEFAULT CURRENT_DATE,
     type TEXT CHECK (type IN ('fixed', 'variable')),

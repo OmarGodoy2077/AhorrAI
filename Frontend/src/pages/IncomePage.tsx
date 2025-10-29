@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { incomeService, accountService, getErrorMessage } from '@/services'
-import type { Income, Account, IncomeType, IncomeFrequency } from '@/types'
+import { incomeService, accountService, currencyService, getErrorMessage } from '@/services'
+import type { Income, Account, IncomeType, IncomeFrequency, Currency } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,7 @@ import { Trash2, Edit, Plus, CheckCircle } from 'lucide-react'
 export const IncomePage = () => {
   const [incomes, setIncomes] = useState<Income[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -29,7 +30,7 @@ export const IncomePage = () => {
     name: string
     type: IncomeType
     amount: number
-    currency: string
+    currency_id: string
     frequency: IncomeFrequency
     income_date: string
     description: string
@@ -38,7 +39,7 @@ export const IncomePage = () => {
     name: '',
     type: 'fixed',
     amount: 0,
-    currency: 'USD',
+    currency_id: '',
     frequency: 'monthly',
     income_date: new Date().toISOString().split('T')[0],
     description: '',
@@ -74,9 +75,22 @@ export const IncomePage = () => {
     }
   }
 
+  const fetchCurrencies = async () => {
+    try {
+      const currencies = await currencyService.getAll()
+      setCurrencies(currencies)
+      if (currencies.length > 0 && !formData.currency_id) {
+        setFormData(prev => ({ ...prev, currency_id: currencies[0].id }))
+      }
+    } catch (err) {
+      console.error(getErrorMessage(err))
+    }
+  }
+
   useEffect(() => {
     fetchIncomes()
     fetchAccounts()
+    fetchCurrencies()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,7 +135,7 @@ export const IncomePage = () => {
       name: income.name,
       type: income.type,
       amount: income.amount,
-      currency: income.currency,
+      currency_id: income.currency_id || '',
       frequency: income.frequency,
       income_date: income.income_date,
       description: income.description || '',
@@ -136,7 +150,7 @@ export const IncomePage = () => {
       name: '',
       type: 'fixed',
       amount: 0,
-      currency: 'USD',
+      currency_id: '',
       frequency: 'monthly',
       income_date: new Date().toISOString().split('T')[0],
       description: '',
@@ -166,7 +180,7 @@ export const IncomePage = () => {
       header: 'Monto',
       render: (item: Income) => (
         <span className="font-semibold">
-          {item.currency} {item.amount.toFixed(2)}
+          {item.currencies?.code || 'N/A'} {item.amount.toFixed(2)}
         </span>
       ),
     },
@@ -309,11 +323,8 @@ export const IncomePage = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">Diario</SelectItem>
                       <SelectItem value="weekly">Semanal</SelectItem>
-                      <SelectItem value="biweekly">Bisemanal</SelectItem>
                       <SelectItem value="monthly">Mensual</SelectItem>
-                      <SelectItem value="yearly">Anual</SelectItem>
                       <SelectItem value="one-time">Una sola vez</SelectItem>
                     </SelectContent>
                   </Select>
@@ -333,13 +344,19 @@ export const IncomePage = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="currency">Moneda</Label>
-                  <Input
-                    id="currency"
-                    value={formData.currency}
-                    onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                    required
-                  />
+                  <Label htmlFor="currency_id">Moneda</Label>
+                  <Select value={formData.currency_id} onValueChange={(value) => setFormData({ ...formData, currency_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar moneda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencies.map((currency) => (
+                        <SelectItem key={currency.id} value={currency.id}>
+                          {currency.code} - {currency.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -353,12 +370,12 @@ export const IncomePage = () => {
 
               <div>
                 <Label htmlFor="account_id">Cuenta (Opcional)</Label>
-                <Select value={formData.account_id} onValueChange={(value) => setFormData({ ...formData, account_id: value })}>
+                <Select value={formData.account_id || "none"} onValueChange={(value) => setFormData({ ...formData, account_id: value === "none" ? "" : value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar cuenta" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin cuenta</SelectItem>
+                    <SelectItem value="none">Sin cuenta</SelectItem>
                     {accounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
                         {acc.name}

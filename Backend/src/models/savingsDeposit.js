@@ -1,12 +1,16 @@
-const config = require('../config');
-const database = config.database;
-
-if (!database) {
-    throw new Error('Database client not initialized. Check SUPABASE configuration.');
+// Lazy load database to avoid circular dependency issues
+function getDatabase() {
+    const config = require('../config');
+    const db = config.database;
+    if (!db) {
+        throw new Error('Database client not initialized. Check SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in .env file.');
+    }
+    return db;
 }
 
 const SavingsDeposit = {
     async create(data) {
+        const database = getDatabase();
         const { data: deposit, error } = await database
             .from('savings_deposits')
             .insert([data])
@@ -18,6 +22,7 @@ const SavingsDeposit = {
 
     async findByGoalId(goalId, options = {}) {
         const { limit = 50, offset = 0, sortBy = 'deposit_date', sortOrder = 'desc' } = options;
+        const database = getDatabase();
         let query = database
             .from('savings_deposits')
             .select('*')
@@ -31,6 +36,7 @@ const SavingsDeposit = {
 
     async findByUserId(userId, options = {}) {
         const { limit = 50, offset = 0, sortBy = 'deposit_date', sortOrder = 'desc' } = options;
+        const database = getDatabase();
         let query = database
             .from('savings_deposits')
             .select('*')
@@ -43,6 +49,7 @@ const SavingsDeposit = {
     },
 
     async findById(id) {
+        const database = getDatabase();
         const { data: deposit, error } = await database
             .from('savings_deposits')
             .select('*')
@@ -53,6 +60,7 @@ const SavingsDeposit = {
     },
 
     async update(id, updates) {
+        const database = getDatabase();
         const { data: deposit, error } = await database
             .from('savings_deposits')
             .update(updates)
@@ -64,6 +72,7 @@ const SavingsDeposit = {
     },
 
     async delete(id) {
+        const database = getDatabase();
         const { error } = await database
             .from('savings_deposits')
             .delete()
@@ -74,6 +83,7 @@ const SavingsDeposit = {
 
     // Get total deposited to a specific goal
     async getTotalByGoalId(goalId) {
+        const database = getDatabase();
         const { data, error } = await database
             .from('savings_deposits')
             .select('amount')
@@ -85,6 +95,7 @@ const SavingsDeposit = {
 
     // Get deposits for a specific goal in a date range
     async getByGoalIdAndDateRange(goalId, startDate, endDate) {
+        const database = getDatabase();
         const { data: deposits, error } = await database
             .from('savings_deposits')
             .select('*')
@@ -98,6 +109,7 @@ const SavingsDeposit = {
 
     // Get total deposited to monthly goal in a specific month
     async getMonthlySavingsForMonth(userId, monthlyGoalId, year, month) {
+        const database = getDatabase();
         const firstDay = new Date(year, month - 1, 1).toISOString().split('T')[0];
         const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
 

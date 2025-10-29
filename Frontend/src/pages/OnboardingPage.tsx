@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { accountService, savingsGoalService, financialSettingService, getErrorMessage } from '@/services'
-import type { Account, SavingsGoal } from '@/types'
+import { accountService, savingsGoalService, financialSettingService, currencyService, getErrorMessage } from '@/services'
+import type { Account, SavingsGoal, Currency } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ export const OnboardingPage = () => {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [currencies, setCurrencies] = useState<Currency[]>([])
 
   // Step 1: Financial Settings
   const [financialForm, setFinancialForm] = useState({
@@ -26,22 +27,36 @@ export const OnboardingPage = () => {
     name: string
     type: 'cash' | 'bank' | 'platform'
     balance: number
-    currency: string
+    currency_id: string
     description: string
   }>>([
-    { name: '', type: 'bank', balance: 0, currency: 'GTQ', description: '' },
+    { name: '', type: 'bank', balance: 0, currency_id: '', description: '' },
   ])
 
   // Step 3: Create Savings Goals
   const [savingsGoals, setSavingsGoals] = useState<Array<{
     name: string
     target_amount: number
-    currency: string
     goal_type: 'monthly' | 'global' | 'custom'
     description: string
   }>>([
-    { name: '', target_amount: 0, currency: 'GTQ', goal_type: 'monthly', description: '' },
+    { name: '', target_amount: 0, goal_type: 'monthly', description: '' },
   ])
+
+  useEffect(() => {
+    const fetchCurrencies = async () => {
+      try {
+        const response = await currencyService.getAll()
+        setCurrencies(response)
+        if (response.length > 0) {
+          setAccounts(prev => prev.map(acc => ({ ...acc, currency_id: response.find(c => c.code === 'GTQ')?.id || response[0].id })))
+        }
+      } catch (err) {
+        console.error(getErrorMessage(err))
+      }
+    }
+    fetchCurrencies()
+  }, [])
 
   const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -256,6 +271,29 @@ export const OnboardingPage = () => {
                           />
                         </div>
                       </div>
+
+                      <div>
+                        <Label htmlFor={`currency-${index}`}>Moneda</Label>
+                        <Select
+                          value={account.currency_id}
+                          onValueChange={(value) => {
+                            const newAccounts = [...accounts]
+                            newAccounts[index].currency_id = value
+                            setAccounts(newAccounts)
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {currencies.map((currency) => (
+                              <SelectItem key={currency.id} value={currency.id}>
+                                {currency.code} - {currency.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </Card>
                 ))}
@@ -270,7 +308,7 @@ export const OnboardingPage = () => {
                         name: '',
                         type: 'bank',
                         balance: 0,
-                        currency: 'GTQ',
+                        currency_id: currencies.find(c => c.code === 'GTQ')?.id || '',
                         description: '',
                       },
                     ])
@@ -382,7 +420,6 @@ export const OnboardingPage = () => {
                       {
                         name: '',
                         target_amount: 0,
-                        currency: 'GTQ',
                         goal_type: 'custom',
                         description: '',
                       },

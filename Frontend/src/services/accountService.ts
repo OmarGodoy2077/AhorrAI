@@ -9,7 +9,7 @@ export const accountService = {
     name: string
     type: 'cash' | 'bank' | 'platform'
     balance: number
-    currency: string
+    currency_id: string
     description?: string
   }): Promise<Account> {
     const response = await api.post<Account>('/accounts', data)
@@ -48,7 +48,7 @@ export const accountService = {
       name: string
       type: 'cash' | 'bank' | 'platform'
       balance: number
-      currency: string
+      currency_id: string
       description: string
     }>
   ): Promise<Account> {

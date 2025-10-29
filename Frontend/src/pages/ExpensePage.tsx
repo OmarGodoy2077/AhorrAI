@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { expenseService, categoryService, accountService, getErrorMessage } from '@/services'
-import type { Expense, Category, Account } from '@/types'
+import { expenseService, categoryService, accountService, currencyService, getErrorMessage } from '@/services'
+import type { Expense, Category, Account, Currency } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ export const ExpensePage = () => {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -23,11 +24,12 @@ export const ExpensePage = () => {
   
   const [formData, setFormData] = useState({
     amount: 0,
-    currency: 'USD',
+    currency_id: '',
     expense_date: new Date().toISOString().split('T')[0],
     description: '',
-    category_id: '',
-    account_id: '',
+    category_id: 'no-category',
+    account_id: 'no-account',
+    type: 'variable' as 'fixed' | 'variable',
   })
 
   const fetchExpenses = async (pageNum: number = 1) => {
@@ -67,20 +69,38 @@ export const ExpensePage = () => {
     }
   }
 
+  const fetchCurrencies = async () => {
+    try {
+      const currencies = await currencyService.getAll()
+      setCurrencies(currencies)
+      if (currencies.length > 0 && !formData.currency_id) {
+        setFormData(prev => ({ ...prev, currency_id: currencies[0].id }))
+      }
+    } catch (err) {
+      console.error(getErrorMessage(err))
+    }
+  }
+
   useEffect(() => {
     fetchExpenses()
     fetchCategories()
     fetchAccounts()
+    fetchCurrencies()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       setError('')
+      const data = {
+        ...formData,
+        category_id: formData.category_id === 'no-category' ? undefined : formData.category_id,
+        account_id: formData.account_id === 'no-account' ? undefined : formData.account_id,
+      }
       if (editingId) {
-        await expenseService.update(editingId, formData)
+        await expenseService.update(editingId, data)
       } else {
-        await expenseService.create(formData)
+        await expenseService.create(data)
       }
       resetForm()
       fetchExpenses(1)
@@ -103,11 +123,12 @@ export const ExpensePage = () => {
   const handleEdit = (expense: Expense) => {
     setFormData({
       amount: expense.amount,
-      currency: expense.currency,
+      currency_id: expense.currency_id || '',
       expense_date: expense.expense_date,
       description: expense.description || '',
-      category_id: expense.category_id || '',
-      account_id: expense.account_id || '',
+      category_id: expense.category_id || 'no-category',
+      account_id: expense.account_id || 'no-account',
+      type: expense.type || 'variable',
     })
     setEditingId(expense.id)
     setShowForm(true)
@@ -116,11 +137,12 @@ export const ExpensePage = () => {
   const resetForm = () => {
     setFormData({
       amount: 0,
-      currency: 'USD',
+      currency_id: '',
       expense_date: new Date().toISOString().split('T')[0],
       description: '',
-      category_id: '',
-      account_id: '',
+      category_id: 'no-category',
+      account_id: 'no-account',
+      type: 'variable',
     })
     setEditingId(null)
     setShowForm(false)
@@ -128,12 +150,23 @@ export const ExpensePage = () => {
 
   const getFilteredExpenses = () => {
     if (filterType === 'all') return expenses
-    return expenses.filter(e => e.category?.type === filterType)
+    return expenses.filter(e => {
+      const cat = e.category || categoryMap[e.category_id!]
+      return cat?.type === filterType
+    })
   }
 
   const filteredExpenses = getFilteredExpenses()
-  const necessaryTotal = expenses.filter(e => e.category?.type === 'necessary').reduce((sum, e) => sum + e.amount, 0)
-  const unnecessaryTotal = expenses.filter(e => e.category?.type === 'unnecessary').reduce((sum, e) => sum + e.amount, 0)
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
+  const categoryMap = categories.reduce((map, cat) => { map[cat.id] = cat; return map; }, {} as Record<string, Category>)
+  const necessaryTotal = expenses.filter(e => {
+    const cat = e.category || categoryMap[e.category_id!]
+    return cat?.type === 'necessary'
+  }).reduce((sum, e) => sum + e.amount, 0)
+  const unnecessaryTotal = expenses.filter(e => {
+    const cat = e.category || categoryMap[e.category_id!]
+    return cat?.type === 'unnecessary'
+  }).reduce((sum, e) => sum + e.amount, 0)
 
   const columns = [
     {
@@ -142,23 +175,27 @@ export const ExpensePage = () => {
     },
     {
       header: 'Categoría',
-      render: (item: Expense) => (
-        <span className="text-sm">{item.category?.name || 'Sin categoría'}</span>
-      ),
+      render: (item: Expense) => {
+        const cat = item.category || categoryMap[item.category_id!]
+        return <span className="text-sm">{cat?.name || 'Sin categoría'}</span>
+      },
     },
     {
       header: 'Tipo',
-      render: (item: Expense) => (
-        <span className={`text-xs px-2 py-1 rounded ${item.category?.type === 'necessary' ? 'bg-red-100 text-red-800 dark:bg-red-900' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900'}`}>
-          {item.category?.type === 'necessary' ? 'Necesario' : 'Innecesario'}
-        </span>
-      ),
+      render: (item: Expense) => {
+        const cat = item.category || categoryMap[item.category_id!]
+        return (
+          <span className={`text-xs px-2 py-1 rounded ${cat?.type === 'necessary' ? 'bg-red-100 text-red-800 dark:bg-red-900' : cat?.type === 'unnecessary' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900' : 'bg-gray-100 text-gray-800 dark:bg-gray-900'}`}>
+            {cat?.type === 'necessary' ? 'Necesario' : cat?.type === 'unnecessary' ? 'Innecesario' : 'No clasificado'}
+          </span>
+        )
+      },
     },
     {
       header: 'Monto',
       render: (item: Expense) => (
         <span className="font-semibold">
-          {item.currency} {item.amount.toFixed(2)}
+          {item.currencies?.code || 'N/A'} {item.amount.toFixed(2)}
         </span>
       ),
     },
@@ -196,7 +233,7 @@ export const ExpensePage = () => {
             <CardTitle className="text-sm font-medium">Total Gastos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">USD {(necessaryTotal + unnecessaryTotal).toFixed(2)}</div>
+            <div className="text-2xl font-bold">USD {totalExpenses.toFixed(2)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -248,11 +285,23 @@ export const ExpensePage = () => {
                   placeholder="Ej: Almuerzo"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  required
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="type">Tipo</Label>
+                <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as 'fixed' | 'variable' })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">Fijo</SelectItem>
+                    <SelectItem value="variable">Variable</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <Label htmlFor="category_id">Categoría</Label>
                   <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
@@ -260,7 +309,7 @@ export const ExpensePage = () => {
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sin categoría</SelectItem>
+                      <SelectItem value="no-category">Sin categoría</SelectItem>
                       {categories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.id}>
                           {cat.name}
@@ -281,6 +330,22 @@ export const ExpensePage = () => {
                     required
                   />
                 </div>
+
+                <div>
+                  <Label htmlFor="currency_id">Moneda</Label>
+                  <Select value={formData.currency_id} onValueChange={(value) => setFormData({ ...formData, currency_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar moneda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencies.map((currency) => (
+                        <SelectItem key={currency.id} value={currency.id}>
+                          {currency.code} - {currency.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -298,7 +363,7 @@ export const ExpensePage = () => {
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sin cuenta</SelectItem>
+                      <SelectItem value="no-account">Sin cuenta</SelectItem>
                       {accounts.map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
                           {acc.name}

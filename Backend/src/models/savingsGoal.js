@@ -1,12 +1,16 @@
-﻿const config = require('../config');
-const database = config.database;
-
-if (!database) {
-    throw new Error('Database client not initialized. Check SUPABASE configuration.');
+﻿// Lazy load database to avoid circular dependency issues
+function getDatabase() {
+    const config = require('../config');
+    const db = config.database;
+    if (!db) {
+        throw new Error('Database client not initialized. Check SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in .env file.');
+    }
+    return db;
 }
 
 const SavingsGoal = {
     async create(data) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .insert([data])
@@ -18,6 +22,7 @@ const SavingsGoal = {
 
     async findByUserId(userId, options = {}) {
         const { limit = 10, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
+        const database = getDatabase();
         let query = database
             .from('savings_goals')
             .select('*')
@@ -30,6 +35,7 @@ const SavingsGoal = {
     },
 
     async findById(id) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .select('*')
@@ -40,6 +46,7 @@ const SavingsGoal = {
     },
 
     async update(id, updates) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .update(updates)
@@ -51,6 +58,7 @@ const SavingsGoal = {
     },
 
     async delete(id) {
+        const database = getDatabase();
         const { error } = await database
             .from('savings_goals')
             .delete()
@@ -60,6 +68,7 @@ const SavingsGoal = {
     },
 
     async setPrimary(userId, goalId) {
+        const database = getDatabase();
         // First, unset all primary for the user
         await database
             .from('savings_goals')
@@ -78,6 +87,7 @@ const SavingsGoal = {
     },
 
     async findMonthlyTarget(userId) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .select('*')
@@ -89,6 +99,7 @@ const SavingsGoal = {
     },
 
     async unsetMonthlyTarget(userId) {
+        const database = getDatabase();
         const { error } = await database
             .from('savings_goals')
             .update({ is_monthly_target: false })
@@ -98,6 +109,7 @@ const SavingsGoal = {
     },
 
     async setAsCustomExcluded(goalId) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .update({ is_custom_excluded_from_global: true })
@@ -109,6 +121,7 @@ const SavingsGoal = {
     },
 
     async setAsCustomIncluded(goalId) {
+        const database = getDatabase();
         const { data: goal, error } = await database
             .from('savings_goals')
             .update({ is_custom_excluded_from_global: false })
@@ -121,6 +134,7 @@ const SavingsGoal = {
 
     // Get all custom goals (excluded from global)
     async findCustomGoals(userId) {
+        const database = getDatabase();
         const { data: goals, error } = await database
             .from('savings_goals')
             .select('*')
@@ -133,6 +147,7 @@ const SavingsGoal = {
 
     // Get all goals that contribute to global
     async findGoalsContributingToGlobal(userId) {
+        const database = getDatabase();
         const { data: goals, error } = await database
             .from('savings_goals')
             .select('*')

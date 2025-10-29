@@ -11,7 +11,8 @@ import {
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  Tag
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Ingresos', path: '/income', icon: Wallet },
   { name: 'Gastos', path: '/expenses', icon: TrendingDown },
+  { name: 'Categorías', path: '/categories', icon: Tag },
   { name: 'Ahorros', path: '/savings', icon: PiggyBank },
   { name: 'Cuentas', path: '/accounts', icon: CreditCard },
   { name: 'Configuración', path: '/settings', icon: Settings },

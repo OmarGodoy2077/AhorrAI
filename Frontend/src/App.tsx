@@ -11,6 +11,7 @@ import { OnboardingPage } from '@/pages/OnboardingPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { IncomePage } from '@/pages/IncomePage'
 import { ExpensePage } from '@/pages/ExpensePage'
+import { CategoryPage } from '@/pages/CategoryPage'
 import { SavingsPage } from '@/pages/SavingsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -46,6 +47,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/income" element={<IncomePage />} />
               <Route path="/expenses" element={<ExpensePage />} />
+              <Route path="/categories" element={<CategoryPage />} />
               <Route path="/savings" element={<SavingsPage />} />
               <Route path="/accounts" element={<AccountPage />} />
               <Route path="/settings" element={<SettingsPage />} />
