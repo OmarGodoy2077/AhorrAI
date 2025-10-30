@@ -8,6 +8,7 @@ export const financialSettingService = {
   async create(data: {
     salary: number
     monthly_savings_target?: number
+    default_currency_id?: string
     effective_date?: string
   }): Promise<FinancialSetting> {
     const response = await api.post<FinancialSetting>(
@@ -61,6 +62,7 @@ export const financialSettingService = {
     data: Partial<{
       salary: number
       monthly_savings_target: number
+      default_currency_id: string
       effective_date: string
       is_current: boolean
     }>

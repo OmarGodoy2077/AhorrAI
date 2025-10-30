@@ -1,7 +1,7 @@
                 -- Schema for AhorraAI Backend
 -- Using Supabase PostgreSQL
--- Last Updated: 2025-10-28
--- Migration 010: Made expense description nullable
+-- Last Updated: 2025-10-29
+-- Migration 012: Fix update_summaries function to handle DELETE operations
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -51,6 +51,7 @@ CREATE TABLE financial_settings (
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     salary DECIMAL(10,2) CHECK (salary >= 0),
     monthly_savings_target DECIMAL(10,2) CHECK (monthly_savings_target >= 0),
+    default_currency_id UUID REFERENCES currencies(id),
     start_date DATE DEFAULT CURRENT_DATE,
     end_date DATE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -428,7 +429,7 @@ CREATE TRIGGER trigger_update_balance_on_expense_delete
 
 -- Function to update monthly and yearly summaries
 CREATE OR REPLACE FUNCTION update_summaries()
-RETURNS TRIGGER 
+RETURNS TRIGGER
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -439,19 +440,34 @@ DECLARE
     total_inc DECIMAL(10,2);
     total_exp DECIMAL(10,2);
     net_change_val DECIMAL(10,2);
-    summary_id UUID;
 BEGIN
-    -- Determine the year and month based on the table
-    IF TG_TABLE_NAME = 'income_sources' THEN
-        target_year := EXTRACT(YEAR FROM NEW.created_at);
-        target_month := EXTRACT(MONTH FROM NEW.created_at);
-        user_id_val := NEW.user_id;
-    ELSIF TG_TABLE_NAME = 'expenses' THEN
-        target_year := EXTRACT(YEAR FROM NEW.date);
-        target_month := EXTRACT(MONTH FROM NEW.date);
-        user_id_val := NEW.user_id;
+    -- Determine the year and month based on the operation and table
+    IF TG_OP = 'DELETE' THEN
+        -- For DELETE operations, use OLD values
+        IF TG_TABLE_NAME = 'income_sources' THEN
+            target_year := EXTRACT(YEAR FROM OLD.created_at);
+            target_month := EXTRACT(MONTH FROM OLD.created_at);
+            user_id_val := OLD.user_id;
+        ELSIF TG_TABLE_NAME = 'expenses' THEN
+            target_year := EXTRACT(YEAR FROM OLD.date);
+            target_month := EXTRACT(MONTH FROM OLD.date);
+            user_id_val := OLD.user_id;
+        ELSE
+            RETURN NULL;
+        END IF;
     ELSE
-        RETURN NULL;
+        -- For INSERT and UPDATE operations, use NEW values
+        IF TG_TABLE_NAME = 'income_sources' THEN
+            target_year := EXTRACT(YEAR FROM NEW.created_at);
+            target_month := EXTRACT(MONTH FROM NEW.created_at);
+            user_id_val := NEW.user_id;
+        ELSIF TG_TABLE_NAME = 'expenses' THEN
+            target_year := EXTRACT(YEAR FROM NEW.date);
+            target_month := EXTRACT(MONTH FROM NEW.date);
+            user_id_val := NEW.user_id;
+        ELSE
+            RETURN NULL;
+        END IF;
     END IF;
 
     -- Calculate totals for the month
@@ -489,10 +505,10 @@ BEGIN
         total_expenses = EXCLUDED.total_expenses,
         net_change = EXCLUDED.net_change;
 
-    -- Note: Automatic savings to goals has been removed. 
+    -- Note: Automatic savings to goals has been removed.
     -- Savings are now tracked manually via savings_deposits table.
 
-    RETURN NEW;
+    RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 

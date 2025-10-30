@@ -13,9 +13,11 @@ import {
   SelectValue,
 } from '@/components/ui/Select'
 import { DataTable } from '@/components/ui/DataTable'
+import { useFormatCurrency } from '@/hooks/useFormatCurrency'
 import { Trash2, Edit, Plus } from 'lucide-react'
 
 export const AccountPage = () => {
+  const { formatCurrency, defaultCurrency } = useFormatCurrency()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,9 +28,9 @@ export const AccountPage = () => {
   const [total, setTotal] = useState(0)
   const [formData, setFormData] = useState({
     name: '',
-    type: 'bank' as AccountType,
+    type: 'cash' as AccountType,
     balance: 0,
-    currency_id: '',
+    currency_id: defaultCurrency?.id || '',
     description: '',
   })
 
@@ -57,7 +59,7 @@ export const AccountPage = () => {
       const currencies = await currencyService.getAll()
       setCurrencies(currencies)
       if (currencies.length > 0 && !formData.currency_id) {
-        setFormData(prev => ({ ...prev, currency_id: currencies[0].id }))
+        setFormData(prev => ({ ...prev, currency_id: defaultCurrency?.id || currencies[0].id }))
       }
     } catch (err) {
       console.error(getErrorMessage(err))
@@ -113,7 +115,7 @@ export const AccountPage = () => {
       name: '',
       type: 'bank',
       balance: 0,
-      currency_id: currencies.length > 0 ? currencies[0].id : '',
+      currency_id: defaultCurrency?.id || currencies.length > 0 ? currencies[0].id : '',
       description: '',
     })
     setEditingId(null)
@@ -137,7 +139,7 @@ export const AccountPage = () => {
       header: 'Balance',
       render: (item: Account) => (
         <span className="font-semibold">
-          {item.currency?.code || 'USD'} {item.balance.toFixed(2)}
+          {formatCurrency(item.balance, item.currency?.code)}
         </span>
       ),
     },
@@ -200,7 +202,7 @@ export const AccountPage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              USD {accounts.reduce((sum, acc) => sum + acc.balance, 0).toFixed(2)}
+              {formatCurrency(accounts.reduce((sum, acc) => sum + acc.balance, 0))}
             </div>
           </CardContent>
         </Card>

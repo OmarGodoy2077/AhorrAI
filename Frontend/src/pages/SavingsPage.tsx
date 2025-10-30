@@ -10,8 +10,10 @@ import { Progress } from '@/components/ui/progress'
 import { DataTable } from '@/components/ui/DataTable'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Trash2, Plus } from 'lucide-react'
+import { useFormatCurrency } from '@/hooks/useFormatCurrency'
 
 export const SavingsPage = () => {
+  const { formatCurrency, defaultCurrency } = useFormatCurrency()
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [deposits, setDeposits] = useState<SavingsDeposit[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,7 +32,7 @@ export const SavingsPage = () => {
   }>({
     name: '',
     target_amount: 0,
-    currency: 'USD',
+    currency: defaultCurrency?.code || 'USD',
     goal_type: 'custom',
     target_date: '',
     description: '',
@@ -78,7 +80,7 @@ export const SavingsPage = () => {
       setGoalFormData({
         name: '',
         target_amount: 0,
-        currency: 'USD',
+        currency: defaultCurrency?.code || 'USD',
         goal_type: 'custom',
         target_date: '',
         description: '',
@@ -179,7 +181,7 @@ export const SavingsPage = () => {
   const depositColumns = [
     {
       header: 'Monto',
-      render: (item: SavingsDeposit) => <span className="font-semibold">{item.goal?.currency || 'USD'} {item.amount.toFixed(2)}</span>,
+      render: (item: SavingsDeposit) => <span className="font-semibold">{formatCurrency(item.amount, item.goal?.currency)}</span>,
     },
     {
       header: 'Descripción',
@@ -226,7 +228,7 @@ export const SavingsPage = () => {
             <CardTitle className="text-sm font-medium">Total Ahorrado</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">USD {totalSaved.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalSaved)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -234,7 +236,7 @@ export const SavingsPage = () => {
             <CardTitle className="text-sm font-medium">Meta Total</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">USD {totalTarget.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalTarget)}</div>
             <div className="text-sm text-muted-foreground mt-2">
               Progreso: {progressPercent.toFixed(0)}%
             </div>

@@ -10,5 +10,6 @@ router.get('/:id', authenticate, IncomeController.getIncome);
 router.put('/:id', authenticate, validateIncome, IncomeController.updateIncome);
 router.delete('/:id', authenticate, IncomeController.deleteIncome);
 router.post('/:id/confirm', authenticate, IncomeController.confirmIncome);
+router.post('/generate/salary-incomes', authenticate, IncomeController.generateSalaryIncomes);
 
 module.exports = router;

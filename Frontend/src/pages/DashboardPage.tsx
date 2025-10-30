@@ -1,72 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
+import { useDashboard } from '@/context/DashboardContext'
 import { Wallet, TrendingDown, PiggyBank, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { Link } from 'react-router-dom'
-import { expenseService, incomeService, accountService } from '@/services'
-import type { Expense, Income } from '@/types'
 
 export const DashboardPage = () => {
   const { user } = useAuth()
-  const [stats, setStats] = useState({
-    totalIncome: 0,
-    totalExpenses: 0,
-    totalSavings: 0,
-    accountBalance: 0,
-  })
+  const { stats, refreshDashboard, isLoading } = useDashboard()
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Obtener datos del mes actual
-        const currentMonth = new Date().getMonth() + 1
-        const currentYear = new Date().getFullYear()
-        
-        // Obtener todos los ingresos y gastos (con límite alto para el mes)
-        const [incomesResponse, expensesResponse, accountsResponse] = await Promise.all([
-          incomeService.getAll({ limit: 1000 }),
-          expenseService.getAll({ limit: 1000 }),
-          accountService.getAll({ limit: 100 })
-        ])
-
-        const incomes = incomesResponse.data
-        const expenses = expensesResponse.data
-        const accounts = accountsResponse.data
-
-        // Filtrar por mes actual
-        const currentMonthIncomes = incomes.filter((income: Income) => {
-          const date = new Date(income.created_at)
-          return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
-        })
-
-        const currentMonthExpenses = expenses.filter((expense: Expense) => {
-          const date = new Date(expense.expense_date)
-          return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
-        })
-
-        const totalIncome = currentMonthIncomes.reduce((sum: number, income: Income) => sum + income.amount, 0)
-        const totalExpenses = currentMonthExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0)
-
-        // Definir el tipo para accounts
-        const typedAccounts = accounts as Array<{ balance: number }>;
-        const totalBalance = typedAccounts.reduce((sum: number, account) => sum + account.balance, 0)
-
-        setStats({
-          totalIncome,
-          totalExpenses,
-          totalSavings: 0, // TODO: calcular ahorros
-          accountBalance: totalBalance,
-        })
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-        // En caso de error, mantener valores por defecto o mostrar mensaje de error
-      }
-    }
-
-    fetchDashboardData()
-  }, [])
+    refreshDashboard()
+  }, [refreshDashboard])
 
  const statsCards = [
     {
@@ -125,7 +72,11 @@ export const DashboardPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(stat.value)}
+                  {isLoading ? (
+                    <div className="animate-pulse bg-muted h-8 w-24 rounded"></div>
+                  ) : (
+                    formatCurrency(stat.value)
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {stat.description}

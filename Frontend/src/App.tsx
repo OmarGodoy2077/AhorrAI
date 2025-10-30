@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from 'next-themes'
 import { AuthProvider } from '@/context/AuthContext'
+import { CurrencyProvider } from '@/context/CurrencyContext'
+import { DashboardProvider } from '@/context/DashboardContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MainLayout } from '@/components/MainLayout'
 
@@ -20,7 +22,9 @@ function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <AuthProvider>
-        <BrowserRouter>
+        <CurrencyProvider>
+          <DashboardProvider>
+          <BrowserRouter>
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
@@ -56,7 +60,9 @@ function App() {
             {/* Catch-all redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
+          </BrowserRouter>
+          </DashboardProvider>
+        </CurrencyProvider>
       </AuthProvider>
     </ThemeProvider>
   )

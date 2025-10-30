@@ -36,6 +36,7 @@ export interface FinancialSetting {
   user_id: string
   salary: number
   monthly_savings_target?: number
+  default_currency_id?: string
   effective_date: string
   is_current: boolean
   created_at: string
@@ -362,5 +363,6 @@ export interface SavingsDepositFormData {
 export interface FinancialSettingFormData {
   salary: number
   monthly_savings_target?: number
+  default_currency_id?: string
   effective_date: string
 }

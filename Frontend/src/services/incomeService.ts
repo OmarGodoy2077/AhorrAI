@@ -76,4 +76,12 @@ export const incomeService = {
     const response = await api.post<Income>(`/incomes/${id}/confirm`)
     return response.data
   },
+
+  /**
+   * Generar ingresos pendientes desde salarios fijos
+   */
+  async generateSalaryIncomes(): Promise<{ message: string; generated: Income[] }> {
+    const response = await api.post<{ message: string; generated: Income[] }>('/incomes/generate/salary-incomes')
+    return response.data
+  },
 }

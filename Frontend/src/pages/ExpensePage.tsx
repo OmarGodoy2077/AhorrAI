@@ -9,8 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DataTable } from '@/components/ui/DataTable'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Trash2, Edit, Plus } from 'lucide-react'
+import { useFormatCurrency } from '@/hooks/useFormatCurrency'
+
+type SortBy = 'date' | 'amount' | 'category'
+type SortOrder = 'asc' | 'desc'
 
 export const ExpensePage = () => {
+  const { formatCurrency, defaultCurrency } = useFormatCurrency()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -22,9 +27,20 @@ export const ExpensePage = () => {
   const [page, setPage] = useState(1)
   const [filterType, setFilterType] = useState<'all' | 'necessary' | 'unnecessary'>('all')
   
+  // New filter states
+  const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth() + 1)
+  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear())
+  const [filterStartDate, setFilterStartDate] = useState<string>('')
+  const [filterEndDate, setFilterEndDate] = useState<string>('')
+  const [useCustomDateRange, setUseCustomDateRange] = useState(false)
+  
+  // Sort states
+  const [sortBy, setSortBy] = useState<SortBy>('date')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  
   const [formData, setFormData] = useState({
     amount: 0,
-    currency_id: '',
+    currency_id: defaultCurrency?.id || '',
     expense_date: new Date().toISOString().split('T')[0],
     description: '',
     category_id: 'no-category',
@@ -74,7 +90,7 @@ export const ExpensePage = () => {
       const currencies = await currencyService.getAll()
       setCurrencies(currencies)
       if (currencies.length > 0 && !formData.currency_id) {
-        setFormData(prev => ({ ...prev, currency_id: currencies[0].id }))
+        setFormData(prev => ({ ...prev, currency_id: defaultCurrency?.id || currencies[0].id }))
       }
     } catch (err) {
       console.error(getErrorMessage(err))
@@ -137,7 +153,7 @@ export const ExpensePage = () => {
   const resetForm = () => {
     setFormData({
       amount: 0,
-      currency_id: '',
+      currency_id: defaultCurrency?.id || '',
       expense_date: new Date().toISOString().split('T')[0],
       description: '',
       category_id: 'no-category',
@@ -149,11 +165,50 @@ export const ExpensePage = () => {
   }
 
   const getFilteredExpenses = () => {
-    if (filterType === 'all') return expenses
-    return expenses.filter(e => {
-      const cat = e.category || categoryMap[e.category_id!]
-      return cat?.type === filterType
+    let filtered = expenses
+
+    // Filter by category type
+    if (filterType !== 'all') {
+      filtered = filtered.filter(e => {
+        const cat = e.category || categoryMap[e.category_id!]
+        return cat?.type === filterType
+      })
+    }
+
+    // Filter by date range
+    if (useCustomDateRange && filterStartDate && filterEndDate) {
+      filtered = filtered.filter(e => {
+        const expenseDate = new Date(e.expense_date)
+        const start = new Date(filterStartDate)
+        const end = new Date(filterEndDate)
+        return expenseDate >= start && expenseDate <= end
+      })
+    } else {
+      // Filter by month/year
+      filtered = filtered.filter(e => {
+        const expenseDate = new Date(e.expense_date)
+        return expenseDate.getMonth() + 1 === filterMonth && expenseDate.getFullYear() === filterYear
+      })
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      let compareValue = 0
+      
+      if (sortBy === 'date') {
+        compareValue = new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime()
+      } else if (sortBy === 'amount') {
+        compareValue = a.amount - b.amount
+      } else if (sortBy === 'category') {
+        const catA = categoryMap[a.category_id!]?.name || 'Sin categoría'
+        const catB = categoryMap[b.category_id!]?.name || 'Sin categoría'
+        compareValue = catA.localeCompare(catB)
+      }
+
+      return sortOrder === 'desc' ? -compareValue : compareValue
     })
+
+    return sorted
   }
 
   const filteredExpenses = getFilteredExpenses()
@@ -233,7 +288,7 @@ export const ExpensePage = () => {
             <CardTitle className="text-sm font-medium">Total Gastos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">USD {totalExpenses.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalExpenses)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -241,7 +296,7 @@ export const ExpensePage = () => {
             <CardTitle className="text-sm font-medium">Necesarios</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">USD {necessaryTotal.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-red-600">{formatCurrency(necessaryTotal)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -249,26 +304,126 @@ export const ExpensePage = () => {
             <CardTitle className="text-sm font-medium">Innecesarios</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">USD {unnecessaryTotal.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-yellow-600">{formatCurrency(unnecessaryTotal)}</div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex gap-2">
-        <Button onClick={() => setShowForm(!showForm)} className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Gasto
-        </Button>
-        <Select value={filterType} onValueChange={(value) => setFilterType(value as 'all' | 'necessary' | 'unnecessary')}>
-          <SelectTrigger className="w-full sm:w-auto">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="necessary">Necesarios</SelectItem>
-            <SelectItem value="unnecessary">Innecesarios</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={() => setShowForm(!showForm)} className="w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Gasto
+          </Button>
+          <Select value={filterType} onValueChange={(value) => setFilterType(value as 'all' | 'necessary' | 'unnecessary')}>
+            <SelectTrigger className="w-full sm:w-auto min-w-[180px]">
+              <SelectValue placeholder="Tipo de gasto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="necessary">Necesarios</SelectItem>
+              <SelectItem value="unnecessary">Innecesarios</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Filter Controls */}
+        <div className="bg-muted p-4 rounded-lg space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm">Filtros</h3>
+            <button
+              onClick={() => setUseCustomDateRange(!useCustomDateRange)}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {useCustomDateRange ? 'Usar Mes/Año' : 'Usar Rango Personalizado'}
+            </button>
+          </div>
+
+          {!useCustomDateRange ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <Label htmlFor="filter-month" className="text-xs">Mes</Label>
+                <Select value={filterMonth.toString()} onValueChange={(value) => setFilterMonth(parseInt(value))}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                      <SelectItem key={month} value={month.toString()}>
+                        {new Date(2024, month - 1).toLocaleDateString('es-ES', { month: 'long' })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="filter-year" className="text-xs">Año</Label>
+                <Select value={filterYear.toString()} onValueChange={(value) => setFilterYear(parseInt(value))}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label htmlFor="filter-start" className="text-xs">Fecha Inicio</Label>
+                <DatePicker
+                  value={filterStartDate}
+                  onChange={setFilterStartDate}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filter-end" className="text-xs">Fecha Fin</Label>
+                <DatePicker
+                  value={filterEndDate}
+                  onChange={setFilterEndDate}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Sort Controls */}
+          <div className="border-t pt-3 grid gap-3 md:grid-cols-2">
+            <div>
+              <Label htmlFor="sort-by" className="text-xs">Ordenar Por</Label>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Fecha</SelectItem>
+                  <SelectItem value="amount">Monto</SelectItem>
+                  <SelectItem value="category">Categoría</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="sort-order" className="text-xs">Orden</Label>
+              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as SortOrder)}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Descendente</SelectItem>
+                  <SelectItem value="asc">Ascendente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Mostrando {filteredExpenses.length} de {expenses.length} gastos
+          </p>
+        </div>
       </div>
 
       {showForm && (

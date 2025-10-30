@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useAuth } from '@/context/AuthContext'
+import { useCurrency } from '@/context/CurrencyContext'
 
 export const SettingsPage = () => {
   const { user, logout } = useAuth()
+  const { currencies, defaultCurrency, setDefaultCurrency } = useCurrency()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -21,6 +24,7 @@ export const SettingsPage = () => {
   const [financialForm, setFinancialForm] = useState({
     salary: 0,
     monthly_savings_target: 0,
+    default_currency_id: '',
   })
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -30,19 +34,45 @@ export const SettingsPage = () => {
     if (user) {
       setProfileForm({ full_name: user.full_name })
     }
-  }, [user])
+  }, [user, currencies])
+
+  useEffect(() => {
+    if (defaultCurrency && !currentSetting) {
+      // Only update if we don't have settings yet
+      setFinancialForm(prev => ({
+        ...prev,
+        default_currency_id: defaultCurrency.id,
+      }))
+    }
+  }, [defaultCurrency, currentSetting, currencies])
 
   const fetchCurrentFinancialSetting = async () => {
+    if (currencies.length === 0) return;
+
     try {
       const setting = await financialSettingService.getCurrent()
       setCurrentSetting(setting)
       setFinancialForm({
         salary: setting.salary || 0,
         monthly_savings_target: setting.monthly_savings_target || 0,
+        default_currency_id: setting.default_currency_id || '',
       })
-    } catch {
-      // No setting created yet
-      console.log('No financial setting found')
+      // Set default currency if exists
+      if (setting.default_currency_id) {
+        const currency = currencies.find(c => c.id === setting.default_currency_id)
+        if (currency) {
+          setDefaultCurrency(currency)
+        }
+      }
+    } catch (error) {
+      // No setting created yet, that's fine
+      console.log('No financial setting found yet')
+      setCurrentSetting(null)
+      setFinancialForm({
+        salary: 0,
+        monthly_savings_target: 0,
+        default_currency_id: defaultCurrency?.id || '',
+      })
     }
   }
 
@@ -74,8 +104,9 @@ export const SettingsPage = () => {
           ...financialForm,
           effective_date: new Date().toISOString().split('T')[0],
         })
+        // Refresh to get the new setting
+        await fetchCurrentFinancialSetting()
       }
-      await fetchCurrentFinancialSetting()
       setSuccess('Configuración financiera actualizada')
     } catch (err) {
       setError(getErrorMessage(err))
@@ -217,6 +248,34 @@ export const SettingsPage = () => {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Cantidad que deseas ahorrar cada mes
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="default_currency">Moneda por Defecto</Label>
+              <Select
+                value={financialForm.default_currency_id || defaultCurrency?.id || ''}
+                onValueChange={(value) => {
+                  setFinancialForm(prev => ({ ...prev, default_currency_id: value }))
+                  const currency = currencies.find(c => c.id === value)
+                  if (currency) {
+                    setDefaultCurrency(currency)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una moneda" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map((currency) => (
+                    <SelectItem key={currency.id} value={currency.id}>
+                      {currency.name} ({currency.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Moneda que se usará por defecto en toda la aplicación
               </p>
             </div>
 
