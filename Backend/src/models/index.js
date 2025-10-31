@@ -2,6 +2,7 @@ module.exports = {
     Profile: require('./profile'),
     FinancialSetting: require('./financialSetting'),
     Income: require('./income'),
+    SalarySchedule: require('./salarySchedule'),
     Expense: require('./expense'),
     Account: require('./account'),
     Category: require('./category'),

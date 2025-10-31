@@ -30,6 +30,14 @@ export function formatDateShort(date: string | Date): string {
   })
 }
 
+/**
+ * Parse an ISO date string (YYYY-MM-DD) correctly, avoiding timezone issues
+ */
+export function parseISODate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function calculatePercentage(current: number, target: number): number {
   if (target === 0) return 0
   return Math.round((current / target) * 100)

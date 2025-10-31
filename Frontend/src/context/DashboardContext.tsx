@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
-import { expenseService, incomeService, accountService } from '@/services'
+import { expenseService, incomeService, accountService, summaryService } from '@/services'
 import type { Expense, Income } from '@/types'
 
 interface DashboardStats {
@@ -54,60 +54,53 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({ children }
       const currentMonth = new Date().getMonth() + 1
       const currentYear = new Date().getFullYear()
 
-      // Obtener todos los ingresos y gastos (con límite alto para el mes)
-      const [incomesResponse, expensesResponse, accountsResponse] = await Promise.all([
-        incomeService.getAll({ limit: 1000 }),
-        expenseService.getAll({ limit: 1000 }),
-        accountService.getAll({ limit: 100 })
-      ])
+      // Obtener resumen mensual desde la base de datos (ya incluye ingresos confirmados)
+      let monthlySummary
+      try {
+        monthlySummary = await summaryService.getMonthlySummary(currentYear, currentMonth)
+      } catch (summaryError) {
+        console.warn('Error fetching monthly summary, falling back to manual calculation:', summaryError)
+        // Fallback: calcular manualmente si no hay resumen
+        const [incomesResponse, expensesResponse] = await Promise.all([
+          incomeService.getAll({ limit: 1000 }),
+          expenseService.getAll({ limit: 1000 })
+        ])
 
-      const incomes = incomesResponse.data
-      const expenses = expensesResponse.data
-      const accounts = accountsResponse.data
+        const incomes = incomesResponse.data
+        const expenses = expensesResponse.data
 
-      // Filtrar por mes actual - incluir ingresos reales (no salarios fuente) y salarios generados confirmados
-      const currentMonthIncomes = incomes.filter((income: Income) => {
-        // Usar income_date para determinar el mes del ingreso
-        const date = new Date(income.income_date)
-        const isCurrentMonth = date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
-        const isConfirmed = income.is_confirmed
-        const isSalarySource = income.description?.includes('[FIJO]') || income.description?.includes('[PROMEDIO]')
-        const isSalaryGenerated = income.description?.includes('Generado desde:')
+        // Filtrar por mes actual - incluir ingresos reales (no salarios fuente) y salarios generados confirmados
+        const currentMonthIncomes = incomes.filter((income: Income) => {
+          const date = new Date(income.income_date)
+          const isCurrentMonth = date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
+          const isConfirmed = income.is_confirmed
+          const isSalarySource = income.description?.includes('[FIJO]') || income.description?.includes('[PROMEDIO]')
+          const isSalaryGenerated = income.description?.includes('Generado desde:')
 
-        // Incluir: ingresos regulares + salarios generados confirmados, excluir salarios fuente
-        const shouldInclude = isCurrentMonth && isConfirmed && (!isSalarySource || isSalaryGenerated)
-        
-        if (shouldInclude) {
-          console.log('Including income in dashboard:', {
-            id: income.id,
-            name: income.name,
-            amount: income.amount,
-            description: income.description,
-            income_date: income.income_date,
-            is_confirmed: income.is_confirmed,
-            isSalarySource,
-            isSalaryGenerated
-          })
+          // Incluir: ingresos regulares + salarios generados confirmados, excluir salarios fuente
+          return isCurrentMonth && isConfirmed && (!isSalarySource || isSalaryGenerated)
+        })
+
+        const currentMonthExpenses = expenses.filter((expense: Expense) => {
+          const date = new Date(expense.expense_date)
+          return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
+        })
+
+        monthlySummary = {
+          total_income: currentMonthIncomes.reduce((sum: number, income: Income) => sum + income.amount, 0),
+          total_expenses: currentMonthExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0),
+          net_change: 0
         }
-        
-        return shouldInclude
-      })
+      }
 
-      const currentMonthExpenses = expenses.filter((expense: Expense) => {
-        const date = new Date(expense.expense_date)
-        return date.getFullYear() === currentYear && date.getMonth() + 1 === currentMonth
-      })
-
-      const totalIncome = currentMonthIncomes.reduce((sum: number, income: Income) => sum + income.amount, 0)
-      const totalExpenses = currentMonthExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0)
-
-      // Definir el tipo para accounts
-      const typedAccounts = accounts as Array<{ balance: number }>
-      const totalBalance = typedAccounts.reduce((sum: number, account) => sum + account.balance, 0)
+      // Obtener balance de cuentas
+      const accountsResponse = await accountService.getAll({ limit: 100 })
+      const accounts = accountsResponse.data
+      const totalBalance = accounts.reduce((sum: number, account) => sum + account.balance, 0)
 
       setStats({
-        totalIncome,
-        totalExpenses,
+        totalIncome: monthlySummary.total_income || 0,
+        totalExpenses: monthlySummary.total_expenses || 0,
         totalSavings: 0, // TODO: calcular ahorros
         accountBalance: totalBalance,
       })

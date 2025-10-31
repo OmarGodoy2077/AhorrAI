@@ -2,6 +2,7 @@
 export { authService } from './authService'
 export { financialSettingService } from './financialSettingService'
 export { incomeService } from './incomeService'
+export { salaryScheduleService } from './salaryScheduleService'
 export { expenseService } from './expenseService'
 export { categoryService } from './categoryService'
 export { accountService } from './accountService'

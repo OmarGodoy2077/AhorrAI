@@ -1,7 +1,7 @@
-# Refactorización del Sistema de Ahorro & Registro Simplificado - ✅ COMPLETADO (v2.1+)
+# Refactorización del Sistema de Ahorro & Registro Simplificado - ✅ COMPLETADO (v2.2+)
 
-**Última Actualización:** 28 de Octubre, 2025  
-**Estado:** ✅ Implementación Exitosa con Separación de Metas Personalizadas y Registro Limpio
+**Última Actualización:** 30 de Octubre, 2025  
+**Estado:** ✅ Implementación Exitosa con Sistema de Ingresos Mejorado y Formulario Simplificado
 
 ---
 
@@ -399,6 +399,230 @@ POST /api/savings-goals
 - `Backend/src/models/savingsGoal.js` (Actualizado v2.1)
 - `Backend/src/controllers/savingsGoalController.js` (Actualizado v2.1)
 - `Backend/src/routes/savingsGoal.js` (Actualizado v2.1)
+
+---
+
+### 4. Formulario de Ingresos Simplificado (v2.2+) - ✅ COMPLETADO
+
+#### ✅ Cambios en Formulario por Tipo
+
+**Formulario para Tipo 'EXTRA' (Ingresos Puntuales)**
+- ✅ Muestra: Nombre, Tipo, Monto, Moneda, Frecuencia, Fecha, Cuenta, Descripción
+- ✅ Campos obligatorios: Nombre, Monto, Frecuencia, Fecha
+- ✅ Se confirma automáticamente al crear
+
+**Formulario para Tipo 'VARIABLE' (Salario Promedio)**
+- ❌ NO muestra: Frecuencia, Fecha, Día de pago
+- ✅ Muestra: Nombre, Tipo, Monto, Moneda, Cuenta, Descripción
+- ✅ Campos obligatorios: Nombre, Monto
+- ✅ Se confirma automáticamente al crear
+- ✅ Es solo un índice de referencia mensual
+
+#### ✅ Cambios en Frontend (IncomePage.tsx)
+
+**Campos Condicionales**
+- ✅ `frequency` solo visible cuando `type === 'extra'`
+- ✅ `income_date` solo visible cuando `type === 'extra'`
+- ✅ Etiqueta actualizada: "Variable (Salario Promedio)"
+
+**Lógica de Envío**
+- ✅ Para `type === 'extra'`: incluye `frequency`, `income_date`, `is_confirmed: true`
+- ✅ Para `type === 'variable'`: excluye `frequency`, `income_date`, incluye `is_confirmed: true`
+
+**Edición de Registros**
+- ✅ `handleEdit()` solo carga campos relevantes según tipo
+- ✅ Evita errores al editar ingresos tipo 'variable' sin campos opcionales
+
+#### ✅ Cambios en Validación Backend
+
+**validateIncome (middleware)**
+- ✅ `frequency` solo requerido cuando `type === 'fixed'` (para salary_schedules)
+- ✅ Para ingresos regulares: `frequency` opcional según tipo
+- ✅ Mantiene validación estricta para campos obligatorios
+
+#### ✅ Cambios en Tipos TypeScript
+
+**IncomeFormData**
+- ✅ `frequency?: IncomeFrequency` (opcional)
+- ✅ `income_date?: string` (opcional)
+- ✅ Permite formularios flexibles según tipo
+
+#### ✅ Experiencia de Usuario Mejorada
+
+**Flujo Simplificado para Salario Promedio**
+1. Usuario selecciona "Variable (Salario Promedio)"
+2. Formulario muestra solo campos esenciales
+3. No confunde con conceptos de frecuencia/fechas
+4. Crea ingreso confirmado automáticamente
+5. Aparece en cálculos de promedio mensual
+
+**Flujo para Ingresos Extras**
+1. Usuario selecciona "Extra"
+2. Formulario muestra todos los campos
+3. Incluye frecuencia y fecha específica
+4. Funciona como ingresos puntuales tradicionales
+
+#### ✅ Problemas Identificados y Solucionados
+
+**PROBLEMA 1: Duplicación de ingresos generados**
+- ❌ Se generaban múltiples registros para el mismo período/fecha
+- ✅ Solución: Índice parcial único `idx_unique_generated_income` en base de datos
+- ✅ Solución: Lógica mejorada en `generateSalaryIncomes()` para detectar exactamente por `(user_id, name, income_date, type)`
+- ✅ Limpieza: Migración `cleanup_duplicate_generated_incomes` removió 13 duplicados manteniendo el más reciente
+
+**PROBLEMA 2: No se podían eliminar ingresos confirmados**
+- ❌ La API no validaba si un ingreso estaba confirmado
+- ✅ Solución: `deleteIncome()` ahora retorna 400 si el ingreso es confirmado
+- ✅ UX mejorado: Mensaje claro "Cannot delete confirmed income. Edit the amount instead."
+- ✅ Protección: Evita corrupción de históricos de ingresos
+
+**PROBLEMA 3: Lógica de confirmación deficiente**
+- ❌ Solo manejaba ingresos fijos, ignoraba variables y extras
+- ✅ Solución: `confirmIncome()` simplificada - solo marca como confirmado sin lógica compleja
+- ✅ Nuevo endpoint: `GET /api/income/confirmation/period` para obtener período de confirmación
+- ✅ Nuevo endpoint: `POST /api/income/confirmation/create` para crear confirmaciones de salarios variables
+
+**PROBLEMA 4: Falta de soporte para ingresos variables/promedio**
+- ❌ No había forma de confirmar salarios variables o calcular promedios
+- ✅ Solución: `getSalaryConfirmationPeriod()` calcula período actual (mensual/quincenal)
+- ✅ Calcula: total esperado, total actual, diferencia, estado (met/partial/pending)
+- ✅ Soporte para múltiples tipos de ingresos: fixed, variable, extra
+
+**PROBLEMA 5: Rutas conflictivas en Express**
+- ❌ POST `/generate/salary-incomes` estaba después de `/:id`, causando conflicto
+- ✅ Solución: Reordenadas rutas específicas ANTES de rutas paramétrizadas
+- ✅ Orden correcto: `/generate/salary-incomes`, `/confirmation/period`, `/confirmation/create` → CRUD
+
+#### ✅ Cambios de Código
+
+**incomeController.js**
+- ✅ `deleteIncome()` - Validación para prevenir eliminar ingresos confirmados
+- ✅ `confirmIncome()` - Simplificada, solo confirma el ingreso
+- ✅ `generateSalaryIncomes()` - Mejorada lógica de detección de duplicados, ahora marca `is_salary: true`
+- ✅ `getSalaryConfirmationPeriod()` - NUEVO - Retorna estado de período actual con totales
+- ✅ `createSalaryConfirmation()` - NUEVO - Crea registro en tabla salary_confirmations
+
+**income.js (Model)**
+- ✅ `create()` - Agregada validación de datos (user_id, name, amount > 0, type válido)
+- ✅ `update()` - Agregada validación de updates
+- ✅ `delete()` - Verificación de income confirmado antes de eliminar
+- ✅ `findByUserIdAndType()` - NUEVO - Obtener ingresos por tipo
+- ✅ `findActiveByUserIdAndType()` - NUEVO - Obtener ingresos no confirmados por tipo
+- ✅ `calculateAverageIncome()` - NUEVO - Calcula promedio de ingresos variables/extras en período
+- ✅ `getIncomesByPeriod()` - NUEVO - Obtiene ingresos en rango de fechas
+
+**income.js (Routes)**
+- ✅ Reordenadas rutas específicas ANTES de paramétrizadas
+- ✅ Nuevas rutas:
+  - `POST /generate/salary-incomes` - Generar ingresos para salarios programados
+  - `GET /confirmation/period?period_type=monthly|biweekly` - Obtener confirmación de período
+  - `POST /confirmation/create` - Crear confirmación de salario variable
+
+#### ✅ Migraciones de Base de Datos
+
+**Migration 1: Cleanup Duplicates**
+- Migración: `cleanup_duplicate_generated_incomes`
+- Acción: Eliminó 13 registros duplicados manteniendo el más reciente por fecha/usuario/tipo
+- Preservó: Datos históricos de salarios confirmados
+
+**Migration 2: Add Unique Constraint**
+- Migración: `add_partial_unique_index_generated_incomes`
+- Acción: Índice único parcial `idx_unique_generated_income` 
+- Previene: Duplicados futuros de ingresos generados automáticamente
+- Filtro: Solo aplica a registros con `description LIKE 'Generado desde:%'`
+
+#### ✅ Flujos de Negocio Soportados
+
+**Flujo 1: Salario FIJO con Confirmación Manual**
+```
+1. Usuario crea salary_schedule (ej: $4000/mes, día 15)
+   - type: 'fixed'
+2. Sistema genera automáticamente income_sources para cada período
+   - is_salary: true, type: 'fixed', is_confirmed: false
+3. Usuario ve ingresos pendientes de confirmación en GET /api/income/confirmation/period
+   - Fixed salaries mostrados en "fixed_salaries" array
+4. Usuario confirma ingreso: POST /api/income/:id/confirm
+   - Marca income como is_confirmed: true
+   - Salario está disponible para contabilización
+```
+
+**Flujo 2: Salario PROMEDIO (Index Only) - NO CONFIRMABLE**
+```
+1. Usuario crea income_source tipo "variable" (ej: ~$3500/mes aproximado)
+   - type: 'variable'
+   - Esto es SOLO un índice de referencia
+2. Usuario registra ingresos extras durante el mes
+   - type: 'extra' (trabajos puntuales, bonos, etc.)
+3. Sistema calcula índice automáticamente en GET /api/income/confirmation/period
+   - expected_average: suma de 'variable' sources
+   - actual_income: suma de 'extra' incomes en el período
+   - difference: actual - expected
+   - status: met (si cumplió), partial (si hay algo), pending (si no hay)
+4. USER VE UNA CARD VISUAL mostrando:
+   - "Meta de salario promedio: $3500"
+   - "Ingresos reales este mes: $3600"
+   - "Estado: ✅ Cumplido (+$100)"
+5. NO HAY CONFIRMACIÓN MANUAL - es puramente informativo
+```
+
+**Flujo 3: Ingresos EXTRAS para Cálculo de Promedio**
+```
+1. Usuario registra income_sources tipo "extra"
+   - Ejemplos: trabajos freelance, bonos, comisiones
+   - type: 'extra'
+2. Cada extra es un ingreso independiente con fecha específica
+3. Sistema SOLO incluye 'extra' en el cálculo del promedio
+4. Los 'extra' no pueden ser confirmados (solo sirven para el índice)
+5. Usuario ve desglose en period_incomes del endpoint de confirmación
+```
+
+#### ✅ Validaciones Implementadas
+
+**En DELETE (deleteIncome)**
+- ✅ No se puede eliminar ingreso confirmado (is_confirmed = true)
+- ✅ Retorna 400: "Cannot delete confirmed income. Edit the amount instead."
+
+**En CONFIRM (confirmIncome)**
+- ✅ Solo se pueden confirmar ingresos tipo 'fixed' (salarios fijos)
+- ✅ Marca is_confirmed: true cuando se confirma
+- ✅ Registra confirmed_at con timestamp
+
+**En GENERACIÓN (generateSalaryIncomes)**
+- ✅ No se crean duplicados: comprueba (user_id, name, income_date, type)
+- ✅ Índice único parcial en BD previene duplicados futuros
+- ✅ Solo genera si next_generation_date <= hoy
+- ✅ Actualiza salary_schedules con siguientes fechas
+
+**En PERÍODO DE CONFIRMACIÓN (getSalaryConfirmationPeriod)**
+- ✅ period_type obligatorio: 'monthly' o 'biweekly'
+- ✅ Calcula período automáticamente
+- ✅ Separación clara:
+  - fixed_salaries: array de salarios confirmables
+  - average_salary: índice SOLO informativo (no confirmable)
+- ✅ Excluye salarios de average (solo cuenta type='extra')
+
+**En CREACIÓN DE CONFIRMACIÓN (createSalaryConfirmation)**
+- ✅ Solo acepta tipo 'fixed' (salarios fijos)
+- ✅ Rechaza 'variable' y 'extra': "Only fixed salary incomes can be confirmed"
+- ✅ Usa Income.confirm() para marcar confirmado
+
+**Tipo de Ingresos Validado**
+- ✅ 'fixed': Salarios confirmables manualmente
+- ✅ 'variable': Índice de promedio (NO confirmable, solo información)
+- ✅ 'extra': Ingresos que contribuyen al cálculo del promedio
+
+#### ✅ Mejoras Inteligentes
+
+- **Detección smart de duplicados**: No confía en descripción, usa (user_id, name, income_date, type)
+- **Separación clara Fixed vs Average**: 
+  - Fixed = confirmable manualmente
+  - Average = índice informativo solamente
+- **Cálculo preciso del período**: Calcula automáticamente (mensual o quincenal)
+- **Exclusión de salarios del promedio**: Solo cuenta type='extra' en average
+- **Estado visual del promedio**: met/partial/pending para UX clara
+- **Protección de históricos**: No permite eliminar confirmados, solo editar
+- **Soporte multi-tipo**: Fixed, variable, extra en mismo sistema
+- **Información detallada**: Retorna desglose completo de ingresos en período
 
 ---
 

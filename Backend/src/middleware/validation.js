@@ -34,7 +34,8 @@ const validateIncome = [
     body('name').isString().isLength({ min: 1, max: 100 }).withMessage('Name must be 1-100 characters'),
     body('type').isIn(['fixed', 'variable', 'extra']).withMessage('Invalid type'),
     body('amount').isFloat({ gt: 0 }).withMessage('Amount must be greater than 0'),
-    body('frequency').isIn(['monthly', 'weekly', 'one-time']).withMessage('Invalid frequency'),
+    // Frequency is required only for 'fixed' type incomes
+    body('frequency').if(body('type').equals('fixed')).isIn(['monthly', 'weekly', 'one-time']).withMessage('Invalid frequency'),
     body('currency_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid currency ID'),
     body('account_id').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Invalid account ID'),
     handleValidationErrors

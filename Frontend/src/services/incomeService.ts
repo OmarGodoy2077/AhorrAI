@@ -12,7 +12,7 @@ export const incomeService = {
     amount: number
     currency_id: string
     frequency: 'monthly' | 'weekly' | 'one-time'
-    income_date: string
+    income_date?: string
     description?: string
   }): Promise<Income> {
     const response = await api.post<Income>('/incomes', data)

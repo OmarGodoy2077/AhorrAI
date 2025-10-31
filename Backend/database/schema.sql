@@ -76,6 +76,26 @@ CREATE TABLE income_sources (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Salary schedules table for managing recurring salary generation
+CREATE TABLE salary_schedules (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT CHECK (type IN ('fixed', 'average')) DEFAULT 'fixed',
+    amount DECIMAL(10,2) CHECK (amount > 0),
+    frequency TEXT CHECK (frequency IN ('monthly', 'weekly')),
+    start_date DATE DEFAULT CURRENT_DATE,
+    salary_day INTEGER CHECK (salary_day BETWEEN 1 AND 31), -- Day of month for monthly, day of week for weekly
+    currency_id UUID REFERENCES currencies(id) DEFAULT NULL,
+    account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    last_generated_date DATE,
+    next_generation_date DATE,
+    is_active BOOLEAN DEFAULT TRUE,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Currencies table
 CREATE TABLE currencies (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -263,6 +283,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_financial_settings_updated_at BEFORE UPDATE ON financial_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_income_sources_updated_at BEFORE UPDATE ON income_sources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_salary_schedules_updated_at BEFORE UPDATE ON salary_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_expenses_updated_at BEFORE UPDATE ON expenses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_spending_limits_updated_at BEFORE UPDATE ON spending_limits FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -274,6 +295,7 @@ CREATE TRIGGER update_savings_deposits_updated_at BEFORE UPDATE ON savings_depos
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE income_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE salary_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
@@ -321,6 +343,11 @@ CREATE POLICY "Users can view own income sources" ON income_sources FOR SELECT U
 CREATE POLICY "Users can insert own income sources" ON income_sources FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own income sources" ON income_sources FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete own income sources" ON income_sources FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own salary schedules" ON salary_schedules FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own salary schedules" ON salary_schedules FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own salary schedules" ON salary_schedules FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own salary schedules" ON salary_schedules FOR DELETE USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can view own accounts" ON accounts FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own accounts" ON accounts FOR INSERT WITH CHECK (auth.uid() = user_id);
@@ -375,16 +402,64 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    -- For incomes, add to balance if confirmed and account_id is set
+    -- For incomes, handle balance changes based on confirmation status
     IF TG_TABLE_NAME = 'income_sources' THEN
-        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        IF TG_OP = 'INSERT' THEN
+            -- Add to balance if confirmed and account_id is set
             IF NEW.account_id IS NOT NULL AND NEW.is_confirmed THEN
                 UPDATE accounts
                 SET balance = balance + NEW.amount,
                     updated_at = NOW()
                 WHERE id = NEW.account_id;
             END IF;
+        ELSIF TG_OP = 'UPDATE' THEN
+            -- Handle confirmation status changes and account/amount changes
+            IF NEW.account_id IS NOT NULL AND OLD.account_id IS NOT NULL AND NEW.account_id = OLD.account_id THEN
+                -- Same account, check confirmation and amount changes
+                IF (OLD.is_confirmed = false AND NEW.is_confirmed = true) THEN
+                    -- Just confirmed: add amount
+                    UPDATE accounts
+                    SET balance = balance + NEW.amount,
+                        updated_at = NOW()
+                    WHERE id = NEW.account_id;
+                ELSIF (OLD.is_confirmed = true AND NEW.is_confirmed = false) THEN
+                    -- Just unconfirmed: subtract amount
+                    UPDATE accounts
+                    SET balance = balance - OLD.amount,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                ELSIF (OLD.is_confirmed = true AND NEW.is_confirmed = true AND OLD.amount != NEW.amount) THEN
+                    -- Amount changed on confirmed income: adjust difference
+                    UPDATE accounts
+                    SET balance = balance + (NEW.amount - OLD.amount),
+                        updated_at = NOW()
+                    WHERE id = NEW.account_id;
+                END IF;
+            ELSIF NEW.account_id IS NOT NULL AND (OLD.account_id IS NULL OR NEW.account_id != OLD.account_id) THEN
+                -- Account changed or was null
+                IF OLD.account_id IS NOT NULL AND OLD.is_confirmed THEN
+                    -- Subtract from old account
+                    UPDATE accounts
+                    SET balance = balance - OLD.amount,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                END IF;
+                IF NEW.is_confirmed THEN
+                    -- Add to new account
+                    UPDATE accounts
+                    SET balance = balance + NEW.amount,
+                        updated_at = NOW()
+                    WHERE id = NEW.account_id;
+                END IF;
+            ELSIF OLD.account_id IS NOT NULL AND NEW.account_id IS NULL AND OLD.is_confirmed THEN
+                -- Account removed: subtract from old account
+                UPDATE accounts
+                SET balance = balance - OLD.amount,
+                    updated_at = NOW()
+                WHERE id = OLD.account_id;
+            END IF;
         ELSIF TG_OP = 'DELETE' THEN
+            -- Subtract from balance if was confirmed
             IF OLD.account_id IS NOT NULL AND OLD.is_confirmed THEN
                 UPDATE accounts
                 SET balance = balance - OLD.amount,
@@ -566,6 +641,8 @@ CREATE TRIGGER trigger_update_balance_on_expense_delete
 CREATE INDEX idx_profiles_email ON profiles(email);
 CREATE INDEX idx_financial_settings_user_id ON financial_settings(user_id);
 CREATE INDEX idx_income_sources_user_id ON income_sources(user_id);
+CREATE INDEX idx_salary_schedules_user_id ON salary_schedules(user_id);
+CREATE INDEX idx_salary_schedules_next_generation ON salary_schedules(user_id, next_generation_date) WHERE is_active = TRUE;
 CREATE INDEX idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX idx_categories_user_id ON categories(user_id);
 CREATE INDEX idx_expenses_user_id ON expenses(user_id);

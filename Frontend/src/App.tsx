@@ -5,6 +5,7 @@ import { CurrencyProvider } from '@/context/CurrencyContext'
 import { DashboardProvider } from '@/context/DashboardContext'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MainLayout } from '@/components/MainLayout'
+import { N8nChatWidget } from '@/components/N8nChatWidget'
 
 // Pages
 import { LandingPage } from '@/pages/LandingPage'
@@ -60,6 +61,7 @@ function App() {
             {/* Catch-all redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <N8nChatWidget />
           </BrowserRouter>
           </DashboardProvider>
         </CurrencyProvider>

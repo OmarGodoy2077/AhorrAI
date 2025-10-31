@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { incomeService, accountService, currencyService, getErrorMessage } from '@/services'
-import type { Income, Account, IncomeType, IncomeFrequency, Currency } from '@/types'
+import { incomeService, accountService, currencyService, salaryScheduleService, getErrorMessage } from '@/services'
+import type { Income, Account, IncomeType, IncomeFrequency, Currency, SalarySchedule, SalaryFrequency } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,17 +15,15 @@ import {
 import { DataTable } from '@/components/ui/DataTable'
 import { useFormatCurrency } from '@/hooks/useFormatCurrency'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { useDashboard } from '@/context/DashboardContext'
-import { Trash2, Edit, Plus, CheckCircle, TrendingUp } from 'lucide-react'
+import { Trash2, Edit, Plus, TrendingUp, CheckCircle } from 'lucide-react'
+import { parseISODate } from '@/lib/utils'
 
 type SalaryType = 'fixed' | 'average'
-const SALARY_AVERAGE_PREFIX = '[PROMEDIO]'
-const SALARY_FIXED_PREFIX = '[FIJO]'
 
 export const IncomePage = () => {
   const { formatCurrency, defaultCurrency } = useFormatCurrency()
-  const { refreshDashboard } = useDashboard()
   const [allIncomes, setAllIncomes] = useState<Income[]>([])
+  const [salarySchedules, setSalarySchedules] = useState<SalarySchedule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,8 +41,9 @@ export const IncomePage = () => {
     type: SalaryType
     amount: number
     currency_id: string
-    frequency: IncomeFrequency
-    income_date: string
+    frequency: SalaryFrequency
+    start_date: string
+    salary_day: number
     description: string
     account_id: string
   }>({
@@ -53,28 +52,25 @@ export const IncomePage = () => {
     amount: 0,
     currency_id: defaultCurrency?.id || '',
     frequency: 'monthly',
-    income_date: new Date().toISOString().split('T')[0],
+    start_date: new Date().toISOString().split('T')[0],
+    salary_day: new Date().getDate(),
     description: '',
     account_id: '',
   })
 
-  // Regular income form state
+  // Regular income form state - SIMPLIFIED
   const [formData, setFormData] = useState<{
     name: string
-    type: IncomeType
     amount: number
     currency_id: string
-    frequency: IncomeFrequency
-    income_date: string
+    income_date?: string  // Optional for average monthly incomes
     description: string
     account_id: string
   }>({
     name: '',
-    type: 'extra',
     amount: 0,
     currency_id: defaultCurrency?.id || '',
-    frequency: 'one-time',
-    income_date: new Date().toISOString().split('T')[0],
+    income_date: new Date().toISOString().split('T')[0], // Default but optional
     description: '',
     account_id: '',
   })
@@ -120,10 +116,20 @@ export const IncomePage = () => {
     }
   }
 
+  const fetchSalarySchedules = async () => {
+    try {
+      const response = await salaryScheduleService.getAll({ limit: 100 })
+      setSalarySchedules(response.data)
+    } catch (err) {
+      console.error(getErrorMessage(err))
+    }
+  }
+
   useEffect(() => {
     fetchIncomes()
     fetchAccounts()
     fetchCurrencies()
+    fetchSalarySchedules()
   }, [])
 
   // Salary handlers
@@ -131,56 +137,46 @@ export const IncomePage = () => {
     e.preventDefault()
     try {
       setError('')
-      // Store salary type in description with prefix
-      const prefix = salaryFormData.type === 'average' ? SALARY_AVERAGE_PREFIX : SALARY_FIXED_PREFIX
-      const descriptionWithPrefix = `${prefix} ${salaryFormData.description}`
       
       const dataToSubmit = {
         name: salaryFormData.name,
-        type: salaryFormData.type === 'average' ? 'variable' as IncomeType : 'fixed' as IncomeType,
+        type: salaryFormData.type,
         amount: salaryFormData.amount,
-        currency_id: salaryFormData.currency_id,
-        frequency: salaryFormData.type === 'average' ? 'one-time' as IncomeFrequency : salaryFormData.frequency,
-        income_date: salaryFormData.income_date,
-        description: descriptionWithPrefix,
-        account_id: salaryFormData.account_id,
-        is_confirmed: false, // Los salarios requieren confirmación manual
+        ...(salaryFormData.type === 'fixed' && {
+          frequency: salaryFormData.frequency,
+          start_date: salaryFormData.start_date,
+          salary_day: salaryFormData.salary_day,
+          account_id: salaryFormData.account_id || undefined,
+        }),
+        currency_id: salaryFormData.currency_id || undefined,
+        description: salaryFormData.description,
       }
 
       if (editingSalaryId) {
-        await incomeService.update(editingSalaryId, dataToSubmit)
+        await salaryScheduleService.update(editingSalaryId, dataToSubmit)
       } else {
-        await incomeService.create(dataToSubmit)
+        await salaryScheduleService.create(dataToSubmit)
       }
       resetSalaryForm()
-      fetchIncomes(1)
+      fetchSalarySchedules()
     } catch (err) {
       setError(getErrorMessage(err))
     }
   }
 
-  const handleSalaryEdit = (income: Income) => {
-    // Detect salary type from description prefix or income type
-    const isSalaryAverage = income.description?.includes(SALARY_AVERAGE_PREFIX) || income.type === 'variable'
-    const salaryType: SalaryType = isSalaryAverage ? 'average' : 'fixed'
-    
-    // Remove prefix from description for display
-    const descriptionClean = income.description
-      ?.replace(SALARY_AVERAGE_PREFIX, '')
-      ?.replace(SALARY_FIXED_PREFIX, '')
-      ?.trim() || ''
-    
+  const handleSalaryEdit = (schedule: SalarySchedule) => {
     setSalaryFormData({
-      name: income.name,
-      type: salaryType,
-      amount: income.amount,
-      currency_id: income.currency_id || '',
-      frequency: income.frequency,
-      income_date: income.income_date,
-      description: descriptionClean,
-      account_id: income.account_id || '',
+      name: schedule.name,
+      type: schedule.type || 'fixed',
+      amount: schedule.amount,
+      currency_id: schedule.currency_id || '',
+      frequency: schedule.frequency || 'monthly',
+      start_date: schedule.start_date || new Date().toISOString().split('T')[0],
+      salary_day: schedule.salary_day || new Date().getDate(),
+      description: schedule.description || '',
+      account_id: schedule.account_id || '',
     })
-    setEditingSalaryId(income.id)
+    setEditingSalaryId(schedule.id)
     setShowSalaryForm(true)
   }
 
@@ -188,8 +184,8 @@ export const IncomePage = () => {
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta fuente de salario?')) return
     try {
       setError('')
-      await incomeService.delete(id)
-      fetchIncomes(1)
+      await salaryScheduleService.delete(id)
+      fetchSalarySchedules()
     } catch (err) {
       setError(getErrorMessage(err))
     }
@@ -202,7 +198,8 @@ export const IncomePage = () => {
       amount: 0,
       currency_id: defaultCurrency?.id || '',
       frequency: 'monthly',
-      income_date: new Date().toISOString().split('T')[0],
+      start_date: new Date().toISOString().split('T')[0],
+      salary_day: new Date().getDate(),
       description: '',
       account_id: '',
     })
@@ -210,19 +207,28 @@ export const IncomePage = () => {
     setShowSalaryForm(false)
   }
 
-  // Regular income handlers
+  // Regular income handlers - SIMPLIFIED
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       setError('')
+      
+      // Simple income submission - all incomes are 'extra' type
       const dataToSubmit = {
-        ...formData,
-        is_confirmed: true, // Ingresos regulares se confirman automáticamente
+        name: formData.name,
+        type: 'extra' as IncomeType, // All incomes in this page are 'extra'
+        amount: formData.amount,
+        currency_id: formData.currency_id,
+        account_id: formData.account_id,
+        description: formData.description,
+        frequency: 'one-time' as IncomeFrequency, // Default frequency
+        income_date: formData.income_date, // Optional - if not set, it's a monthly average
+        is_confirmed: true, // All incomes are confirmed automatically
       }
+
       if (editingId) {
         await incomeService.update(editingId, dataToSubmit)
       } else {
-        // Crear ingreso extra - se marca como confirmado automáticamente
         await incomeService.create(dataToSubmit)
       }
       resetForm()
@@ -238,18 +244,6 @@ export const IncomePage = () => {
       setError('')
       await incomeService.delete(id)
       fetchIncomes(1)
-    } catch (err) {
-      setError(getErrorMessage(err))
-    }
-  }
-
-  const handleConfirm = async (id: string) => {
-    try {
-      setError('')
-      await incomeService.confirm(id)
-      fetchIncomes(page)
-      // Refrescar el dashboard para actualizar los totales
-      await refreshDashboard()
     } catch (err) {
       setError(getErrorMessage(err))
     }
@@ -273,17 +267,27 @@ export const IncomePage = () => {
     }
   }
 
+  const handleConfirm = async (id: string) => {
+    try {
+      setError('')
+      await incomeService.confirm(id)
+      fetchIncomes(page)
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
+  }
+
   const handleEdit = (income: Income) => {
-    setFormData({
+    const editData = {
       name: income.name,
-      type: income.type,
       amount: income.amount,
       currency_id: income.currency_id || '',
-      frequency: income.frequency,
       income_date: income.income_date,
       description: income.description || '',
       account_id: income.account_id || '',
-    })
+    }
+
+    setFormData(editData)
     setEditingId(income.id)
     setShowForm(true)
   }
@@ -291,11 +295,9 @@ export const IncomePage = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      type: 'extra',
       amount: 0,
       currency_id: defaultCurrency?.id || '',
-      frequency: 'one-time',
-      income_date: new Date().toISOString().split('T')[0],
+      income_date: undefined,
       description: '',
       account_id: '',
     })
@@ -304,13 +306,8 @@ export const IncomePage = () => {
   }
 
   // Separate incomes by type
-  const salaries = allIncomes.filter(i =>
-    (i.description?.includes(SALARY_AVERAGE_PREFIX) || i.description?.includes(SALARY_FIXED_PREFIX)) &&
-    !i.description?.includes('Generado desde:')
-  )
+  const salaries = salarySchedules // Now salaries come directly from salary_schedules table
   const regularIncomes = allIncomes.filter(i =>
-    !i.description?.includes(SALARY_AVERAGE_PREFIX) && 
-    !i.description?.includes(SALARY_FIXED_PREFIX) &&
     !i.description?.includes('Generado desde:')
   )
   const generatedSalaryIncomes = allIncomes.filter(i =>
@@ -318,42 +315,33 @@ export const IncomePage = () => {
   )
 
   // Calculate statistics
-  const salaryTotal = salaries.filter(i => i.description?.includes(SALARY_FIXED_PREFIX)).reduce((sum, i) => sum + i.amount, 0)
-  const confirmedSalaries = salaries.filter(i => i.is_confirmed || i.description?.includes(SALARY_FIXED_PREFIX)).length
-  const averageSalaries = salaries.filter(i => i.description?.includes(SALARY_AVERAGE_PREFIX)).length
-  const fixedSalaries = salaries.filter(i => i.description?.includes(SALARY_FIXED_PREFIX)).length
+  const salaryTotal = salaries.reduce((sum, s) => sum + s.amount, 0)
+  const activeSalaries = salaries.filter(s => s.is_active).length
 
   const regularIncomesTotal = [...regularIncomes, ...generatedSalaryIncomes].filter(i => i.is_confirmed).reduce((sum, i) => sum + i.amount, 0)
   const confirmedRegularIncomes = [...regularIncomes, ...generatedSalaryIncomes].length
-
-  // Average tracking calculation
-  const currentMonth = new Date().getMonth()
-  const currentYear = new Date().getFullYear()
-  const monthlyAverageSalaries = salaries.filter(i => {
-    const date = new Date(i.income_date)
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear && i.description?.includes(SALARY_AVERAGE_PREFIX)
-  })
-  const expectedAverageAmount = monthlyAverageSalaries.reduce((sum, i) => sum + i.amount, 0)
-  const receivedConfirmedAmount = regularIncomes.reduce((sum, i) => sum + i.amount, 0)
-  const difference = expectedAverageAmount - receivedConfirmedAmount
 
   // Salary columns
   const salaryColumns = [
     {
       header: 'Nombre',
-      render: (item: Income) => <span className="font-medium">{item.name}</span>,
+      render: (item: SalarySchedule) => <span className="font-medium">{item.name}</span>,
     },
     {
       header: 'Tipo',
-      render: (item: Income) => (
-        <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 px-2 py-1 rounded">
-          {item.type === 'variable' || item.description?.includes(SALARY_AVERAGE_PREFIX) ? 'Promedio' : 'Fijo'}
+      render: (item: SalarySchedule) => (
+        <span className={`text-xs px-2 py-1 rounded ${
+          item.type === 'fixed' 
+            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900' 
+            : 'bg-orange-100 text-orange-800 dark:bg-orange-900'
+        }`}>
+          {item.type === 'fixed' ? 'Fijo' : 'Promedio'}
         </span>
       ),
     },
     {
       header: 'Monto',
-      render: (item: Income) => (
+      render: (item: SalarySchedule) => (
         <span className="font-semibold">
           {item.currencies?.code || 'N/A'} {item.amount.toFixed(2)}
         </span>
@@ -361,55 +349,49 @@ export const IncomePage = () => {
     },
     {
       header: 'Frecuencia',
-      render: (item: Income) => (
+      render: (item: SalarySchedule) => (
         <span className="text-sm text-muted-foreground capitalize">
-          {item.frequency}
+          {item.frequency || 'N/A'}
         </span>
       ),
     },
     {
-      header: 'Estado',
-      render: (item: Income) => {
-        const isAverage = item.type === 'variable' || item.description?.includes(SALARY_AVERAGE_PREFIX);
-        const isFixed = item.description?.includes(SALARY_FIXED_PREFIX);
+      header: 'Día de pago',
+      render: (item: SalarySchedule) => (
+        <span className="text-sm text-muted-foreground">
+          {item.type === 'fixed' && item.frequency && item.salary_day !== undefined
+            ? (item.frequency === 'monthly' ? `${item.salary_day}` : `Día ${item.salary_day}`)
+            : 'N/A'
+          }
+        </span>
+      ),
+    },
+    {
+      header: 'Próximo pago',
+      render: (item: SalarySchedule) => {
+        if (!item.next_generation_date || item.type !== 'fixed') return <span className="text-sm text-muted-foreground">N/A</span>;
         
-        if (isAverage) {
-          return (
-            <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 px-2 py-1 rounded">
-              Solo seguimiento
-            </span>
-          );
-        }
-        
-        if (isFixed) {
-          return (
-            <span className={`text-xs px-2 py-1 rounded ${item.is_confirmed ? 'bg-green-100 text-green-800 dark:bg-green-900' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900'}`}>
-              {item.is_confirmed ? 'Confirmado' : 'Pendiente'}
-            </span>
-          );
-        }
+        const date = parseISODate(item.next_generation_date);
         
         return (
-          <span className={`text-xs px-2 py-1 rounded ${item.is_confirmed ? 'bg-green-100 text-green-800 dark:bg-green-900' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900'}`}>
-            {item.is_confirmed ? 'Confirmado' : 'Pendiente'}
+          <span className="text-sm text-muted-foreground">
+            {date.toLocaleDateString()}
           </span>
         );
       },
     },
     {
+      header: 'Estado',
+      render: (item: SalarySchedule) => (
+        <span className={`text-xs px-2 py-1 rounded ${item.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900' : 'bg-gray-100 text-gray-800 dark:bg-gray-900'}`}>
+          {item.is_active ? 'Activo' : 'Inactivo'}
+        </span>
+      ),
+    },
+    {
       header: 'Acciones',
-      render: (item: Income) => (
+      render: (item: SalarySchedule) => (
         <div className="flex gap-2">
-          {!item.is_confirmed && !(item.type === 'variable' || item.description?.includes(SALARY_AVERAGE_PREFIX)) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleConfirm(item.id)}
-              title="Confirmar salario"
-            >
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            </Button>
-          )}
           <Button variant="ghost" size="sm" onClick={() => handleSalaryEdit(item)}>
             <Edit className="h-4 w-4" />
           </Button>
@@ -462,16 +444,36 @@ export const IncomePage = () => {
     },
     {
       header: 'Estado',
-      render: () => (
-        <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 px-2 py-1 rounded">
-          Confirmado
-        </span>
-      ),
+      render: (item: Income) => {
+        if (item.is_confirmed) {
+          return (
+            <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 px-2 py-1 rounded">
+              Confirmado
+            </span>
+          );
+        }
+        return (
+          <span className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 px-2 py-1 rounded">
+            Pendiente
+          </span>
+        );
+      },
     },
     {
       header: 'Acciones',
       render: (item: Income) => (
         <div className="flex gap-2">
+          {/* Show confirm button only for generated incomes that are not confirmed */}
+          {item.description?.includes('Generado desde:') && !item.is_confirmed && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleConfirm(item.id)}
+              title="Confirmar ingreso"
+            >
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
             <Edit className="h-4 w-4" />
           </Button>
@@ -586,10 +588,10 @@ export const IncomePage = () => {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <Label htmlFor="name">Nombre</Label>
+                    <Label htmlFor="name">Nombre del Ingreso *</Label>
                     <Input
                       id="name"
-                      placeholder="Ej: Ingreso extra, Regalo"
+                      placeholder="Ej: Trabajo freelance, Bono, etc."
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
@@ -598,47 +600,18 @@ export const IncomePage = () => {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <Label htmlFor="type">Tipo</Label>
-                      <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as IncomeType })}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="extra">Extra</SelectItem>
-                          <SelectItem value="variable">Variable</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="frequency">Frecuencia</Label>
-                      <Select value={formData.frequency} onValueChange={(value) => setFormData({ ...formData, frequency: value as IncomeFrequency })}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="one-time">Una sola vez</SelectItem>
-                          <SelectItem value="weekly">Semanal</SelectItem>
-                          <SelectItem value="monthly">Mensual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <Label htmlFor="amount">Monto</Label>
+                      <Label htmlFor="amount">Monto *</Label>
                       <Input
                         id="amount"
                         type="number"
                         step="0.01"
                         value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                        onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
                         required
                       />
                     </div>
                     <div>
-                      <Label htmlFor="currency_id">Moneda</Label>
+                      <Label htmlFor="currency_id">Moneda *</Label>
                       <Select value={formData.currency_id} onValueChange={(value) => setFormData({ ...formData, currency_id: value })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar moneda" />
@@ -655,15 +628,18 @@ export const IncomePage = () => {
                   </div>
 
                   <div>
-                    <Label htmlFor="income_date">Fecha</Label>
+                    <Label htmlFor="income_date">Fecha específica (opcional)</Label>
                     <DatePicker
                       value={formData.income_date}
                       onChange={(date) => setFormData({ ...formData, income_date: date })}
                     />
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Si no especificas una fecha, se considerará como ingreso mensual promedio
+                    </p>
                   </div>
 
                   <div>
-                    <Label htmlFor="account_id">Cuenta (Opcional)</Label>
+                    <Label htmlFor="account_id">Cuenta (opcional)</Label>
                     <Select value={formData.account_id || 'none'} onValueChange={(value) => setFormData({ ...formData, account_id: value === 'none' ? '' : value })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar cuenta" />
@@ -680,10 +656,10 @@ export const IncomePage = () => {
                   </div>
 
                   <div>
-                    <Label htmlFor="description">Descripción</Label>
+                    <Label htmlFor="description">Descripción (opcional)</Label>
                     <Input
                       id="description"
-                      placeholder="Detalles adicionales"
+                      placeholder="Detalles adicionales del ingreso"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     />
@@ -722,23 +698,23 @@ export const IncomePage = () => {
           <div className="grid gap-6 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Salarios Fijos</CardTitle>
+                <CardTitle className="text-sm font-medium">Total de Salarios</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{fixedSalaries}</div>
+                <div className="text-2xl font-bold">{salaries.length}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Salarios Promedio</CardTitle>
+                <CardTitle className="text-sm font-medium">Salarios Activos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{averageSalaries}</div>
+                <div className="text-2xl font-bold">{activeSalaries}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Salario</CardTitle>
+                <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(salaryTotal)}</div>
@@ -746,43 +722,64 @@ export const IncomePage = () => {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Confirmados</CardTitle>
+                <CardTitle className="text-sm font-medium">Próximos Pagos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{confirmedSalaries}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Average tracking card */}
-          {expectedAverageAmount > 0 && (
-            <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Seguimiento de Promedio Mensual
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Promedio Esperado</p>
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{formatCurrency(expectedAverageAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Ingresos Confirmados</p>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(receivedConfirmedAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Diferencia</p>
-                    <p className={`text-2xl font-bold ${difference > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                      {difference > 0 ? 'Falta ' : 'Superado '}{formatCurrency(Math.abs(difference))}
-                    </p>
-                  </div>
+                <div className="text-2xl font-bold">
+                  {salaries.filter(s => s.next_generation_date && new Date(s.next_generation_date) > new Date()).length}
                 </div>
               </CardContent>
             </Card>
-          )}
+            {salaries.some(s => s.type === 'average') && (
+              <Card className="col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Progreso de Salario Promedio</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const averageSalaries = salaries.filter(s => s.type === 'average');
+                    const totalTargetAverage = averageSalaries.reduce((sum, salary) => sum + (salary.amount || 0), 0);
+                    const currentMonthIncomes = allIncomes.filter(income => {
+                      const incomeDate = new Date(income.income_date);
+                      const now = new Date();
+                      return incomeDate.getMonth() === now.getMonth() && incomeDate.getFullYear() === now.getFullYear();
+                    });
+                    const currentMonthTotal = currentMonthIncomes.reduce((sum, income) => sum + (income.amount || 0), 0);
+                    const remaining = totalTargetAverage - currentMonthTotal;
+                    const progress = (currentMonthTotal / totalTargetAverage) * 100;
+
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Objetivo Mensual:</span>
+                          <span className="font-medium">{formatCurrency(totalTargetAverage)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Ingresos del Mes:</span>
+                          <span className="font-medium">{formatCurrency(currentMonthTotal)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Faltante:</span>
+                          <span className={`font-medium ${remaining > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                            {remaining > 0 ? formatCurrency(remaining) : 'Meta Alcanzada!'}
+                          </span>
+                        </div>
+                        <div className="mt-4">
+                          <div className="h-2 bg-muted rounded overflow-hidden">
+                            <div
+                              className={`h-full ${remaining > 0 ? 'bg-primary' : 'bg-green-600'}`}
+                              style={{ width: `${Math.min(progress, 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 text-right">{Math.round(progress)}% completado</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
           <Button onClick={() => setShowSalaryForm(!showSalaryForm)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
@@ -831,15 +828,9 @@ export const IncomePage = () => {
                   </div>
 
                   <div className="bg-muted p-3 rounded-lg text-sm">
-                    {salaryFormData.type === 'fixed' ? (
-                      <p>
-                        <strong>Fijo:</strong> Basado en la fecha de primer pago y frecuencia, se generarán confirmaciones automáticas para que las valides. Se asocia a una cuenta específica (opcional).
-                      </p>
-                    ) : (
-                      <p>
-                        <strong>Promedio:</strong> Solo un índice mensual de tu promedio de salario. No genera confirmaciones automáticas. Perfectamente para salarios variables o comisiones. Se compara automáticamente con tus ingresos confirmados del mes.
-                      </p>
-                    )}
+                    <p>
+                      <strong>Salarios Programados:</strong> Configura tu salario recurrente y se generarán automáticamente ingresos pendientes de confirmación según la frecuencia y día especificado. Puedes asociarlo a una cuenta específica (opcional).
+                    </p>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
@@ -876,7 +867,7 @@ export const IncomePage = () => {
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
                           <Label htmlFor="salary-frequency">Frecuencia</Label>
-                          <Select value={salaryFormData.frequency} onValueChange={(value) => setSalaryFormData({ ...salaryFormData, frequency: value as IncomeFrequency })}>
+                          <Select value={salaryFormData.frequency} onValueChange={(value) => setSalaryFormData({ ...salaryFormData, frequency: value as SalaryFrequency })}>
                             <SelectTrigger>
                               <SelectValue />
                             </SelectTrigger>
@@ -887,10 +878,22 @@ export const IncomePage = () => {
                           </Select>
                         </div>
                         <div>
-                          <Label htmlFor="salary-date">Fecha de Primer Pago</Label>
+                          <Label htmlFor="salary-day">Día de Pago</Label>
+                          <Input
+                            id="salary-day"
+                            type="number"
+                            min={salaryFormData.frequency === 'monthly' ? 1 : 0}
+                            max={salaryFormData.frequency === 'monthly' ? 31 : 6}
+                            value={salaryFormData.salary_day}
+                            onChange={(e) => setSalaryFormData({ ...salaryFormData, salary_day: parseInt(e.target.value) || 1 })}
+                            placeholder={salaryFormData.frequency === 'monthly' ? 'Ej: 15' : 'Ej: 1 (Lunes)'}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="salary-date">Fecha de Inicio</Label>
                           <DatePicker
-                            value={salaryFormData.income_date}
-                            onChange={(date) => setSalaryFormData({ ...salaryFormData, income_date: date })}
+                            value={salaryFormData.start_date}
+                            onChange={(date) => setSalaryFormData({ ...salaryFormData, start_date: date })}
                           />
                         </div>
                       </div>

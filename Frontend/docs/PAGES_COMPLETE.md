@@ -28,14 +28,14 @@ AhorraAI es una aplicación de finanzas personales diseñada específicamente pa
 - **Estilos**: Tailwind CSS con sistema de diseño Shadcn/ui
 - **Routing**: React Router DOM v7
 - **Temas**: Next-themes (Día/Noche)
-- **Backend**: API REST con Supabase
+- **Backend**: API REST con Supabase o servicio similar
 - **Tipos**: TypeScript con definiciones claras
 
 ### Estructura de Componentes
 - `src/components/ui/` - Componentes base de Shadcn/ui
 - `src/components/auth/` - Componentes específicos de autenticación
 - `src/pages/` - Componentes de páginas principales
-- `src/context/` - Contextos globales (AuthContext)
+- `src/context/` - Contextos globales (AuthContext, CurrencyContext, DashboardContext)
 - `src/services/` - Lógica de comunicación con APIs
 - `src/hooks/` - Hooks personalizados
 - `src/types/` - Definiciones de tipos TypeScript
@@ -174,12 +174,14 @@ AhorraAI es una aplicación de finanzas personales diseñada específicamente pa
 - `financialSettingService` - para guardar configuración
 - `accountService` - para crear cuentas
 - `savingsGoalService` - para crear metas de ahorro
+- `currencyService.getAll()` - para mostrar monedas en creación de cuentas
 - Navegación con `useNavigate` entre pasos y al finalizar
 
 **Efectos**:
 - Fetch de monedas para uso en cuentas
 - Manejo de estado local para cada paso
 - Validación de formularios
+- Navegación controlada por pasos
 
 ### DashboardPage
 
@@ -202,118 +204,100 @@ AhorraAI es una aplicación de finanzas personales diseñada específicamente pa
 4. Muestra gráficos de progreso visual
 
 **Interacciones**:
-- `incomeService.getAll()` - para obtener ingresos del mes
-- `expenseService.getAll()` - para obtener gastos del mes
-- `accountService.getAll()` - para obtener balances de cuentas
+- `useDashboard` hook - para obtener stats de la API
+- `useAuth` - para obtener información del usuario
 - Navegación a IncomePage, ExpensePage, SavingsPage para acciones rápidas
 
 **Efectos**:
 - `useEffect` que fetch datos del mes actual
 - Cálculos de totales y porcentajes
 - Actualización automática de estadísticas
+- Manejo de loading states
 
 ### IncomePage
 
 **Ruta**: `/income`
 **Tipo**: Protegida
 
-**Propósito**: Gestión completa de ingresos recurrentes (salarios) e ingresos puntuales.
+**Propósito**: Gestión completa de ingresos puntuales y salarios recurrentes (fuentes de salario fijo y promedio).
 
-**Arquitectura de Pestaña**:
+**Arquitectura de Pestañas**:
 La página tiene dos pestañas principales:
 
 #### **Pestaña 1: Ingresos Puntuales**
 **Componentes**:
-1. **Stats Summary** (4 tarjetas):
+1. **Stats Summary** (2 tarjetas):
    - Total de Ingresos (cantidad)
-   - Total Confirmado (cantidad)
-   - Monto Total (suma)
-   - Monto Confirmado (suma)
-2. **Botón "Nuevo Ingreso"**: Abre formulario
-3. **Formulario de Ingreso Puntual**:
+   - Monto Total de Ingresos confirmados
+2. **Botones de Acción**:
+   - "Nuevo Ingreso" 
+   - "Generar de Salarios" (genera ingresos pendientes desde fuentes de salario fijo)
+3. **Formulario de Ingreso Puntual** (colapsible):
    - Nombre (ej: "Ingreso extra", "Regalo")
-   - Tipo: `extra` o `variable`
-   - Frecuencia: `one-time`, `weekly`, o `monthly`
    - Monto
-   - Moneda
-   - Fecha
+   - Moneda (selector)
+   - Fecha específica (opcional)
    - Cuenta (opcional)
-   - Descripción
-4. **Data Table**: Lista de ingresos con acciones (confirmar, editar, eliminar)
+   - Descripción (opcional)
+4. **Data Table**: Lista de ingresos con acciones (editar, eliminar)
 
 **Flujo de Ingresos Puntuales**:
 1. Usuario hace click en "Nuevo Ingreso"
-2. Completa formulario con datos del ingreso
-3. Al guardar, se crea el ingreso (se marca automáticamente como confirmado)
-4. Se muestra en la tabla lista para referencia
-5. Usuario puede editar o eliminar
+2. Completa formulario con datos del ingreso (todo se marca como tipo 'extra' y confirmado por defecto)
+3. Al guardar, se crea el ingreso y se actualiza la tabla
+4. Usuario puede editar o eliminar ingresos existentes
+5. Botón "Generar de Salarios" llama al endpoint que crea ingresos pendientes desde fuentes de salario fijo programadas
 
-#### **Pestaña 2: Salarios Recurrentes**
+**Pestaña 2: Salarios Recurrentes (Fuentes de Salario)**
+
 **Componentes**:
 1. **Stats Summary** (4 tarjetas):
-   - Salarios Fijos (cantidad)
-   - Salarios Promedio (cantidad)
-   - Total Salario (suma)
-   - Total Confirmado (cantidad de salarios confirmados)
-2. **Tarjeta de Seguimiento de Promedio** (condicional):
-   - Solo visible si hay salarios tipo "Promedio"
-   - Muestra:
-     - Promedio Esperado (monto total de salarios promedio del mes)
-     - Ingresos Confirmados (suma de ingresos confirmados)
-     - Diferencia (si falta, superado, etc.)
-3. **Botón "Nueva Fuente de Salario"**: Abre formulario
-4. **Formulario de Salario**:
+   - Total de Salarios (cantidad)
+   - Salarios Activos (cantidad)
+   - Monto Total de Salarios (suma)
+   - Próximos Pagos (cantidad)
+2. **Botón "Nueva Fuente de Salario"**: Abre formulario
+3. **Formulario de Fuente de Salario**:
    - Nombre de la Fuente (ej: "Trabajo en X", "Freelance habitual")
-   - Tipo de Ingreso (radio/select):
-     - **Fijo**: Monto exacto. Genera confirmaciones automáticas basadas en frecuencia y fecha de primer pago. Se asocia a una cuenta (opcional). El sistema usa esto para generar entradas pendientes.
-     - **Promedio**: Monto promedio mensual. No genera confirmaciones automáticas. Sirve como índice de seguimiento. Se compara automáticamente con ingresos confirmados del mes.
+   - Tipo de Ingreso: Solo "Fijo" actualmente (esto controla si se generan confirmaciones automáticas)
    - Monto
    - Moneda
-   - *Si es tipo Fijo*:
-     - Frecuencia: `weekly` o `monthly`
-     - Fecha de Primer Pago (referencia para calcular fechas futuras)
-     - Cuenta Destino (opcional)
-   - *Si es tipo Promedio*:
-     - (Oculta frecuencia y fecha, no son necesarios)
+   - Frecuencia: `weekly` o `monthly`
+   - Día de Pago: día de la semana o del mes según frecuencia
+   - Fecha de Inicio: para calcular próximos pagos
+   - Cuenta Destino (opcional)
    - Descripción (opcional)
-5. **Data Table**: Lista de salarios con acciones (editar, eliminar)
+4. **Data Table**: Lista de fuentes de salario con acciones (editar, eliminar)
 
 **Flujo de Salarios Recurrentes**:
+1. Usuario agrega una nueva fuente de salario con monto, frecuencia, día de pago y fecha de inicio
+2. Al guardar, se almacena la fuente como `SalarySchedule` con todos los parámetros
+3. El sistema puede generar ingresos pendientes automáticamente (llamando al endpoint `/income-service/generate/salary-incomes`)
+4. Las fuentes de salario no crean ingresos directamente, sino que planean pagos futuros
+5. Estadísticas se actualizan mostrando información sobre fuentes activas y próximos pagos
 
-**Tipo Fijo**:
-1. Usuario agrega salario tipo "Fijo" con monto, frecuencia y fecha de primer pago
-2. Sistema genera automáticamente entradas pendientes en ingresos puntuales según la frecuencia
-3. Usuario confirma cada recepción de salario en la tabla de ingresos
-4. Stats actualizan automáticamente
-
-**Tipo Promedio**:
-1. Usuario agrega salario tipo "Promedio" con monto esperado
-2. No se generan confirmaciones automáticas
-3. Tarjeta de seguimiento calcula diferencia vs ingresos confirmados del mes
-4. Útil para salarios variables o comisiones
-
-**Implementación Técnica**:
-- Los salarios se guardan como `type: 'fixed'` en la BD
-- Se diferencian por prefijo en `description`:
-  - `[FIJO] descripción` → Salario fijo (genera automáticas)
-  - `[PROMEDIO] descripción` → Salario promedio (solo seguimiento)
-- El frontend filtra y presenta visualmente estas distinciones
-- `is_confirmed` se usa para rastrear confirmaciones de salarios fijos
+**Formularios y Campos Especiales**:
+- El formulario de salarios muestra campos específicos para programación de pagos (frecuencia, día, fecha inicio)
+- No hay distinción entre "fijo" y "promedio" en el código actual de IncomePage (esto parece haber cambiado desde la documentación original)
 
 **Interacciones**:
-- `incomeService.getAll()` - para listar todos los ingresos
-- `incomeService.create()` - para crear ingreso o salario
-- `incomeService.update()` - para editar
-- `incomeService.delete()` - para eliminar
-- `incomeService.confirm()` - para confirmar recepción de salario
+- `incomeService.getAll()` - para listar ingresos
+- `salaryScheduleService.getAll()` - para listar fuentes de salario
+- `salaryScheduleService.create()` - para crear fuente de salario
+- `salaryScheduleService.update()` - para editar fuente de salario
+- `salaryScheduleService.delete()` - para eliminar fuente de salario
+- `incomeService.create()` - para crear ingreso puntual
+- `incomeService.update()` - para editar ingreso
+- `incomeService.delete()` - para eliminar ingreso
+- `incomeService.generateSalaryIncomes()` - para generar ingresos pendientes desde fuentes de salario
 - `accountService.getAll()` - para mostrar cuentas disponibles
 - `currencyService.getAll()` - para mostrar monedas
 
 **Efectos**:
-- Fetch inicial de ingresos, cuentas y monedas
-- Separación de datos en función del tipo/descripción
-- Cálculo dinámico de estadísticas según pestaña
-- Tarjeta de promedio solo visible cuando aplica
+- Fetch inicial de ingresos, fuentes de salario, cuentas y monedas
+- Separación de datos entre ingresos puntuales y fuentes de salario
+- Cálculo dinámico de estadísticas según pestaña activa
+- Toggle entre pestañas de ingresos y salarios
 
 ### ExpensePage
 
@@ -330,7 +314,7 @@ La página tiene dos pestañas principales:
 2. **Controles de Acción**:
    - Botón "Nuevo Gasto"
    - Selector de Tipo de Gasto (Todos/Necesarios/Innecesarios)
-3. **Panel de Filtros Completo**:
+3. **Panel de Filtros Completo** (colapsible):
    - Toggle: Mes/Año vs Rango Personalizado
    - **Si Mes/Año**:
      - Selector de Mes (enero-diciembre)
@@ -367,7 +351,7 @@ La página tiene dos pestañas principales:
    - **Monto**: Ordena por cantidad gastada
    - **Categoría**: Ordena alfabéticamente por categoría
 2. Usuario elige dirección (ascendente/descendente)
-3. Tabla se reorganiza inmediatamente
+3. Tabla se reorganiza inmediatamente (sin nuevo request)
 
 **CRUD de Gastos**:
 1. **Creación**: Click en "Nuevo Gasto", completa formulario
@@ -386,22 +370,9 @@ La página tiene dos pestañas principales:
 
 **Efectos**:
 - Fetch inicial de gastos, categorías, cuentas y monedas
-- Filtrado dinámico por tipo de categoría
-- Filtrado dinámico por rango de fechas (Mes/Año o personalizado)
-- Ordenamiento en tiempo real sin refetch
-- Cálculos de totales (necesario/innecesario) actualizados según filtros actuales
+- Filtrado en cliente por tipo de categoría, rango de fechas y ordenamiento
+- Cálculos de totales actualizados según filtros aplicados
 - Contador dinámico de gastos mostrados vs totales
-- `expenseService.create()` - para crear gasto
-- `expenseService.update()` - para editar gasto
-- `expenseService.delete()` - para eliminar gasto
-- `categoryService.getAll()` - para mostrar categorías
-- `accountService.getAll()` - para mostrar cuentas
-- `currencyService.getAll()` - para mostrar monedas
-
-**Efectos**:
-- Fetch inicial de gastos, categorías, cuentas y monedas
-- Filtrado de gastos por tipo
-- Cálculo de totales agrupados por categoría
 
 ### SavingsPage
 
@@ -412,16 +383,20 @@ La página tiene dos pestañas principales:
 
 **Componentes**:
 1. **Stats Summary**: Total metas, total ahorrado, meta total con progreso
-2. **Acciones Rápidas**: Crear meta, crear depósito
+2. **Acciones Rápidas**:
+   - "Nueva Meta"
+   - "Nuevo Depósito"
 3. **Formulario de Meta**: Nombre, monto, tipo, fecha, descripción
 4. **Formulario de Depósito**: Meta, monto, fecha, descripción
-5. **Data Tables**: Metas y depósitos con acciones
+5. **Data Tables**: 
+   - Metas de ahorro con acciones (eliminar)
+   - Depósitos recientes (solo lectura)
 
 **Flujo Completo**:
 1. **Listado**: Fetch de metas y depósitos
-2. **Creación de Meta**: Formulario con tipo (mensual/global/personalizada)
-3. **Creación de Depósito**: Asociar a meta existente
-4. **Edición**: A través de acciones en las tablas
+2. **Creación de Meta**: Formulario con nombre, monto, tipo (mensual/global/custom), fecha objetivo (opcional)
+3. **Creación de Depósito**: Asociar a meta existente con monto y fecha
+4. **Edición**: No hay edición directa, solo eliminación
 5. **Eliminación**: Confirmación con alerta
 
 **Interacciones**:
@@ -436,6 +411,7 @@ La página tiene dos pestañas principales:
 - Fetch inicial de metas y depósitos
 - Cálculo de estadísticas y progresos
 - Manejo de formularios con estado local
+- Progreso visual con componentes Progress
 
 ### CategoryPage
 
@@ -451,7 +427,7 @@ La página tiene dos pestañas principales:
 
 **Flujo Completo**:
 1. **Listado**: Fetch de categorías con paginación
-2. **Creación**: Formulario con nombre y tipo (necesario/innecesario)
+2. **Creación**: Formulario con nombre, tipo (necesario/innecesario), descripción
 3. **Edición**: Carga datos existentes en formulario
 4. **Eliminación**: Confirmación con alerta
 
@@ -465,6 +441,7 @@ La página tiene dos pestañas principales:
 - Fetch inicial de categorías
 - Manejo de formulario con validación
 - Paginación de resultados
+- Toggle entre formulario de creación/edición y tabla
 
 ### AccountPage
 
@@ -476,12 +453,12 @@ La página tiene dos pestañas principales:
 **Componentes**:
 1. **Stats Summary**: Total cuentas, balance total
 2. **Formulario**: Crear/editar cuentas
-3. **Tabla de Cuentas**: Nombre, tipo, balance, acciones
+3. **Tabla de Cuentas**: Nombre, tipo, balance, descripción, acciones
 4. **Botones de Acción**: Añadir, editar, eliminar
 
 **Flujo Completo**:
 1. **Listado**: Fetch de cuentas con paginación
-2. **Creación**: Formulario con nombre, tipo, balance, moneda
+2. **Creación**: Formulario con nombre, tipo (cash/bank/platform), balance inicial, moneda, descripción
 3. **Edición**: Carga datos existentes en formulario
 4. **Eliminación**: Confirmación con alerta
 
@@ -496,40 +473,47 @@ La página tiene dos pestañas principales:
 - Fetch inicial de cuentas y monedas
 - Cálculo de balance total
 - Manejo de formulario con validación
+- Paginación de resultados
 
 ### SettingsPage
 
 **Ruta**: `/settings`
 **Tipo**: Protegida
 
-**Propósito**: Configuración del perfil y preferencias.
+**Propósito**: Configuración del perfil y preferencias financieras.
 
 **Componentes**:
-1. **Perfil Personal**: Nombre, email (no editable)
-2. **Configuración Financiera**: Salario, meta ahorro mensual
+1. **Perfil Personal**: Nombre completo (editable), email (no editable)
+2. **Configuración Financiera**: Salario mensual, meta ahorro mensual, moneda por defecto
 3. **Avatar**: Subida de imagen de perfil
 4. **Zona de Peligro**: Eliminación de cuenta
 
 **Flujo Completo**:
-1. **Carga Inicial**: Fetch de datos del usuario y configuración
-2. **Edición de Perfil**: Actualización de nombre
-3. **Configuración Financiera**: Salario y meta de ahorro
+1. **Carga Inicial**: Fetch de datos del usuario y configuración financiera
+2. **Edición de Perfil**: Actualización de nombre completo
+3. **Configuración Financiera**: Actualización de salario, meta de ahorro y moneda por defecto
 4. **Subida de Avatar**: Selección y carga de imagen
 5. **Eliminación de Cuenta**: Proceso de confirmación múltiple
 
 **Interacciones**:
-- `authService.updateProfile()` - para actualizar perfil
+- `authService.updateProfile()` - para actualizar datos del perfil
 - `authService.uploadAvatar()` - para subir avatar
-- `authService.deleteAccount()` - para eliminar cuenta
-- `financialSettingService.getCurrent()` - para cargar configuración
-- `financialSettingService.create()` - para crear configuración
-- `financialSettingService.update()` - para actualizar configuración
+- `authService.deleteAccount()` - para eliminar cuenta (llama a logout)
+- `financialSettingService.getCurrent()` - para cargar configuración financiera
+- `financialSettingService.create()` - para crear configuración financiera
+- `financialSettingService.update()` - para actualizar configuración financiera
 - `useAuth.logout()` - para cerrar sesión tras eliminar cuenta
 
 **Efectos**:
 - Fetch inicial de datos del usuario y configuración
-- Manejo de formularios separados
+- Manejo de múltiples formularios (perfil, financiero, avatar)
 - Proceso de confirmación para eliminación de cuenta
+- Actualización del contexto de moneda por defecto
+
+**Eventos que Desencadena**:
+- Actualización de nombre del usuario en todas las páginas
+- Cambio de moneda por defecto afecta a todo el sistema
+- Eliminación de cuenta y logout completo
 
 ## Interacciones Entre Páginas
 
@@ -539,9 +523,9 @@ La página tiene dos pestañas principales:
 - **Header** → Logout disponible en todas las páginas protegidas
 
 ### Flujo de Transacciones
-- **IncomePage** → Puede crear ingresos que afectan Dashboard (stats)
-- **ExpensePage** → Puede crear gastos que afectan Dashboard (stats) y Categorías
-- **SavingsPage** → Puede crear metas/depositos que afectan Dashboard (stats)
+- **IncomePage** → Crea ingresos que afectan Dashboard (stats)
+- **ExpensePage** → Crea gastos que afectan Dashboard (stats) y Categorías
+- **SavingsPage** → Crea metas y depósitos que afectan Dashboard (stats)
 
 ### Flujo de Configuración
 - **Onboarding** → Establece configuración base para Dashboard
@@ -627,25 +611,21 @@ La página tiene dos pestañas principales:
 
 ## 📋 Historial de Cambios y Actualizaciones
 
-### Actualización del 29 de Octubre de 2025
+### Actualización del 30 de Octubre de 2025
 
-#### **IncomePage - Mejoras Significativas**
+#### **IncomePage - Nueva Arquitectura de Fuentes de Salario**
 
 **Nuevas Características**:
-1. ✅ **Sistema de Pestañas**: Separación clara entre Ingresos Puntuales y Salarios Recurrentes
-2. ✅ **Gestión de Salarios Recurrentes**:
-   - Tipo "Fijo": Con generación automática de confirmaciones
-   - Tipo "Promedio": Para seguimiento sin confirmaciones automáticas
-   - Sistema de prefijos en descripción para diferenciar (`[FIJO]` vs `[PROMEDIO]`)
-3. ✅ **Tarjeta de Seguimiento de Promedio**: Muestra diferencia entre promedio esperado e ingresos confirmados
-4. ✅ **Ingresos Extras Simplificados**: Se crean sin necesidad de confirmación manual
-5. ✅ **Campos Dinámicos**: Formulario de salarios muestra/oculta campos según tipo
-
+1. ✅ **Sistema de Pestañas**: Separación clara entre Ingresos Puntuales y Fuentes de Salario
+2. ✅ **Gestión de Fuentes de Salario**:
+   - Fuentes con programación de pagos (frecuencia, día, fecha inicio)
+   - Generación automática de ingresos pendientes mediante endpoint especial
+   - Cálculo de próximos pagos programados
+   
 **Cambios Técnicos**:
-- Los salarios se guardan como `type: 'fixed'` en BD pero se diferencian por prefijo en descripción
-- Filtración inteligente en frontend para separar salarios de otros ingresos
-- Cálculos automáticos de estadísticas por pestaña
-- Manejo de frecuencia y fecha de primer pago solo para salarios fijos
+- Se han eliminado las distinciones entre "fijo" y "promedio" en el código actual
+- Las fuentes de salario ahora se manejan como `SalarySchedule` independientes
+- El sistema de generación automática ahora es un endpoint separado
 
 #### **ExpensePage - Sistema de Filtración y Ordenamiento Completo**
 
@@ -664,26 +644,17 @@ La página tiene dos pestañas principales:
 5. ✅ **Filtración Mantenida**: El filtro por tipo (necesario/innecesario) se mantiene y combina con fecha
 
 **Cambios Técnicos**:
-- Lógica de filtración combinada (tipo + fecha + ordenamiento)
-- Sorting en cliente para mejor UX (sin refetch del servidor)
+- Lógica de filtración combinada (tipo + fecha + ordenamiento) ahora se ejecuta en cliente
+- Ordenamiento en cliente para mejor UX (sin refetch del servidor)
 - Almacenamiento de estado para cada filtro por separado
 - Validación de rangos de fecha
 
 #### **Mejoras Compartidas**
 
-1. **Mejor Organización Visual**: Ambas páginas usan pestañas y secciones expandibles
-2. **Stats Dinámicas**: Se actualizan según filtros actuales
-3. **UX Consistente**: Estilos y patrones similares en ambas páginas
+1. **Mejor Organización Visual**: Ambas páginas usan formularios colapsables y secciones expandibles
+2. **Stats Dinámicas**: Se actualizan según filtros y datos actuales
+3. **UX Consistente**: Estilos y patrones similares en todas las páginas
 4. **Performance**: Filtración en cliente para respuesta inmediata
 
-#### **Próximas Mejoras Sugeridas**
-
-1. Guardar preferencias de filtro en localStorage
-2. Exportar datos filtrados a CSV/PDF
-3. Gráficos de tendencias en IncomePage (ingresos por mes)
-4. Gráficos de gastos por categoría en ExpensePage
-5. Alertas automáticas para salarios no confirmados
-6. Sincronización automática con cambios en base de datos (WebSocket)
-
 ---
-**Documentación actualizada el 29 de octubre de 2025**
+**Documentación actualizada el 30 de octubre de 2025**

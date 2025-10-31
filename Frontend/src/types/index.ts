@@ -72,6 +72,41 @@ export interface Income {
 }
 
 // ========================================
+// Salary Schedule Types
+// ========================================
+
+export type SalaryFrequency = 'monthly' | 'weekly'
+
+export interface SalarySchedule {
+  id: string
+  user_id: string
+  name: string
+  type: 'fixed' | 'average'
+  amount: number
+  frequency?: SalaryFrequency
+  start_date?: string
+  salary_day?: number // Day of month (1-31) for monthly, day of week for weekly
+  currency_id?: string
+  currencies?: {
+    code: string
+    name: string
+    symbol: string
+  }
+  account_id?: string
+  accounts?: {
+    id: string
+    name: string
+    type: string
+  }
+  last_generated_date?: string
+  next_generation_date?: string
+  is_active: boolean
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
 // Expense Types
 // ========================================
 
@@ -261,11 +296,8 @@ export interface MonthlySummary {
   month: number
   total_income: number
   total_expenses: number
-  savings: number
-  balance: number
-  currency: string
+  net_change: number
   created_at: string
-  updated_at: string
 }
 
 export interface YearlySummary {
@@ -321,8 +353,8 @@ export interface IncomeFormData {
   type: IncomeType
   amount: number
   currency: string
-  frequency: IncomeFrequency
-  income_date: string
+  frequency?: IncomeFrequency  // Opcional para tipo 'variable'
+  income_date?: string        // Opcional para tipo 'variable'
   account_id?: string
   description?: string
 }

@@ -11,6 +11,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Trash2, Plus } from 'lucide-react'
 import { useFormatCurrency } from '@/hooks/useFormatCurrency'
+import { parseISODate } from '@/lib/utils'
 
 export const SavingsPage = () => {
   const { formatCurrency, defaultCurrency } = useFormatCurrency()
@@ -189,7 +190,13 @@ export const SavingsPage = () => {
     },
     {
       header: 'Fecha',
-      render: (item: SavingsDeposit) => <span className="text-sm">{new Date(item.deposit_date).toLocaleDateString()}</span>,
+      render: (item: SavingsDeposit) => {
+        if (!item.deposit_date) return <span className="text-sm">N/A</span>;
+        
+        const date = parseISODate(item.deposit_date);
+        
+        return <span className="text-sm">{date.toLocaleDateString()}</span>;
+      },
     },
     {
       header: 'Acciones',
