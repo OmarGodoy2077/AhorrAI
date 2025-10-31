@@ -13,7 +13,10 @@ module.exports = {
     port: process.env.PORT || 3000,
     nodeEnv: process.env.NODE_ENV || 'development',
     timezone: process.env.TZ || 'America/Guatemala',
-    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+    // CORS allowed origins (comma-separated list)
+    allowedOrigins: process.env.ALLOWED_ORIGINS ?
+        process.env.ALLOWED_ORIGINS.split(',').map(url => url.trim()) :
+        ['http://localhost:5173', 'https://pleasing-fulfillment-production.up.railway.app'],
     // Supabase auth client (for authentication operations)
     supabaseAuth: dbConfig.auth
 };
