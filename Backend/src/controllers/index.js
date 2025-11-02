@@ -13,5 +13,6 @@ module.exports = {
     SavingsDepositController: require('./savingsDepositController'),
     SpendingLimitController: require('./spendingLimitController'),
     SalaryScheduleController: require('./salaryScheduleController'),
-    SystemController: require('./systemController')
+    SystemController: require('./systemController'),
+    ChatContextController: require('./chatContextController')
 };
