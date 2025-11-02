@@ -15,13 +15,15 @@ import {
 import { DataTable } from '@/components/ui/DataTable'
 import { useFormatCurrency } from '@/hooks/useFormatCurrency'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { useToast } from '@/components/ui/toast'
 import { Trash2, Edit, Plus, TrendingUp, CheckCircle } from 'lucide-react'
-import { parseISODate } from '@/lib/utils'
+import { parseISODate, getTodayGuatemalaDate, parseDecimalAmount } from '@/lib/utils'
 
 type SalaryType = 'fixed' | 'average'
 
 export const IncomePage = () => {
   const { formatCurrency, defaultCurrency } = useFormatCurrency()
+  const { success, error: showError } = useToast()
   const [allIncomes, setAllIncomes] = useState<Income[]>([])
   const [salarySchedules, setSalarySchedules] = useState<SalarySchedule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -34,6 +36,13 @@ export const IncomePage = () => {
   const [currentTab, setCurrentTab] = useState<'salaries' | 'incomes'>('incomes')
   const [showSalaryForm, setShowSalaryForm] = useState(false)
   const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null)
+
+  // Filter states
+  const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth() + 1)
+  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear())
+  const [filterStartDate, setFilterStartDate] = useState<string>('')
+  const [filterEndDate, setFilterEndDate] = useState<string>('')
+  const [useCustomDateRange, setUseCustomDateRange] = useState(false)
 
   // Salary form state
   const [salaryFormData, setSalaryFormData] = useState<{
@@ -52,8 +61,8 @@ export const IncomePage = () => {
     amount: 0,
     currency_id: defaultCurrency?.id || '',
     frequency: 'monthly',
-    start_date: new Date().toISOString().split('T')[0],
-    salary_day: new Date().getDate(),
+    start_date: getTodayGuatemalaDate(),
+    salary_day: parseInt(getTodayGuatemalaDate().split('-')[2]),
     description: '',
     account_id: '',
   })
@@ -70,7 +79,7 @@ export const IncomePage = () => {
     name: '',
     amount: 0,
     currency_id: defaultCurrency?.id || '',
-    income_date: new Date().toISOString().split('T')[0], // Default but optional
+    income_date: getTodayGuatemalaDate(), // Default but optional
     description: '',
     account_id: '',
   })
@@ -97,7 +106,9 @@ export const IncomePage = () => {
   const fetchAccounts = async () => {
     try {
       const response = await accountService.getAll({ limit: 100 })
-      setAccounts(response.data)
+      // Filter out virtual accounts - they are only for savings goals
+      const realAccounts = response.data.filter(account => !account.is_virtual_account)
+      setAccounts(realAccounts)
     } catch (err) {
       console.error(getErrorMessage(err))
     }
@@ -154,13 +165,17 @@ export const IncomePage = () => {
 
       if (editingSalaryId) {
         await salaryScheduleService.update(editingSalaryId, dataToSubmit)
+        success('Salario actualizado', 'El salario se actualizó correctamente')
       } else {
         await salaryScheduleService.create(dataToSubmit)
+        success('Salario creado', 'El nuevo salario se agregó correctamente')
       }
       resetSalaryForm()
       fetchSalarySchedules()
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error', errorMsg)
     }
   }
 
@@ -171,8 +186,8 @@ export const IncomePage = () => {
       amount: schedule.amount,
       currency_id: schedule.currency_id || '',
       frequency: schedule.frequency || 'monthly',
-      start_date: schedule.start_date || new Date().toISOString().split('T')[0],
-      salary_day: schedule.salary_day || new Date().getDate(),
+      start_date: schedule.start_date || getTodayGuatemalaDate(),
+      salary_day: schedule.salary_day || parseInt(getTodayGuatemalaDate().split('-')[2]),
       description: schedule.description || '',
       account_id: schedule.account_id || '',
     })
@@ -185,9 +200,12 @@ export const IncomePage = () => {
     try {
       setError('')
       await salaryScheduleService.delete(id)
+      success('Salario eliminado', 'El salario se eliminó correctamente')
       fetchSalarySchedules()
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error al eliminar', errorMsg)
     }
   }
 
@@ -198,8 +216,8 @@ export const IncomePage = () => {
       amount: 0,
       currency_id: defaultCurrency?.id || '',
       frequency: 'monthly',
-      start_date: new Date().toISOString().split('T')[0],
-      salary_day: new Date().getDate(),
+      start_date: getTodayGuatemalaDate(),
+      salary_day: parseInt(getTodayGuatemalaDate().split('-')[2]),
       description: '',
       account_id: '',
     })
@@ -228,13 +246,17 @@ export const IncomePage = () => {
 
       if (editingId) {
         await incomeService.update(editingId, dataToSubmit)
+        success('Ingreso actualizado', 'El ingreso se actualizó correctamente')
       } else {
         await incomeService.create(dataToSubmit)
+        success('Ingreso creado', 'El nuevo ingreso se agregó correctamente')
       }
       resetForm()
       fetchIncomes(1)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error', errorMsg)
     }
   }
 
@@ -243,9 +265,12 @@ export const IncomePage = () => {
     try {
       setError('')
       await incomeService.delete(id)
+      success('Ingreso eliminado', 'El ingreso se eliminó correctamente')
       fetchIncomes(1)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error al eliminar', errorMsg)
     }
   }
 
@@ -255,13 +280,17 @@ export const IncomePage = () => {
       setLoading(true)
       const result = await incomeService.generateSalaryIncomes()
       if (result.generated.length > 0) {
+        success('Ingresos generados', `Se generaron ${result.generated.length} ingresos desde los salarios`)
         setError(`Se generaron ${result.generated.length} ingresos pendientes de salarios.`)
       } else {
+        showError('Sin ingresos', 'No hay nuevos ingresos para generar.')
         setError('No hay nuevos ingresos para generar.')
       }
       fetchIncomes(page)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error al generar', errorMsg)
     } finally {
       setLoading(false)
     }
@@ -271,9 +300,12 @@ export const IncomePage = () => {
     try {
       setError('')
       await incomeService.confirm(id)
+      success('Ingreso confirmado', 'El ingreso se confirmó correctamente')
       fetchIncomes(page)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error al confirmar', errorMsg)
     }
   }
 
@@ -307,19 +339,44 @@ export const IncomePage = () => {
 
   // Separate incomes by type
   const salaries = salarySchedules // Now salaries come directly from salary_schedules table
-  const regularIncomes = allIncomes.filter(i =>
+  const allRegularIncomes = allIncomes.filter(i =>
     !i.description?.includes('Generado desde:')
   )
-  const generatedSalaryIncomes = allIncomes.filter(i =>
+  const allGeneratedSalaryIncomes = allIncomes.filter(i =>
     i.description?.includes('Generado desde:')
   )
+
+  // Filter incomes by date range (only confirmed incomes)
+  const getFilteredIncomes = () => {
+    let filtered = allIncomes.filter(i => i.is_confirmed === true)
+
+    if (useCustomDateRange && filterStartDate && filterEndDate) {
+      filtered = filtered.filter(i => {
+        const incomeDate = new Date(i.income_date)
+        const start = new Date(filterStartDate)
+        const end = new Date(filterEndDate)
+        return incomeDate >= start && incomeDate <= end
+      })
+    } else {
+      // Filter by month/year
+      filtered = filtered.filter(i => {
+        if (!i.income_date) return false
+        const incomeDate = new Date(i.income_date)
+        return incomeDate.getMonth() + 1 === filterMonth && incomeDate.getFullYear() === filterYear
+      })
+    }
+
+    return filtered
+  }
+
+  const filteredIncomes = getFilteredIncomes()
 
   // Calculate statistics
   const salaryTotal = salaries.reduce((sum, s) => sum + s.amount, 0)
   const activeSalaries = salaries.filter(s => s.is_active).length
 
-  const regularIncomesTotal = [...regularIncomes, ...generatedSalaryIncomes].filter(i => i.is_confirmed).reduce((sum, i) => sum + i.amount, 0)
-  const confirmedRegularIncomes = [...regularIncomes, ...generatedSalaryIncomes].length
+  const regularIncomesTotal = filteredIncomes.reduce((sum, i) => sum + i.amount, 0)
+  const confirmedRegularIncomes = [...allRegularIncomes, ...allGeneratedSalaryIncomes].filter(i => i.is_confirmed).length
 
   // Salary columns
   const salaryColumns = [
@@ -486,38 +543,38 @@ export const IncomePage = () => {
   ]
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Ingresos</h1>
-        <p className="text-muted-foreground mt-1">
-          Gestiona tus fuentes de ingresos recurrentes y puntuales
+    <div className="space-y-4 sm:space-y-6 px-3 sm:px-4 lg:px-6 animate-fade-in">
+      <div className="animate-slide-in-down">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">Ingresos</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          Gestiona tus fuentes de ingresos
         </p>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-3 rounded-lg animate-slide-in-down">
           {error}
         </div>
       )}
 
       {/* Tab navigation */}
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-2 sm:gap-3 border-b overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
         <button
           onClick={() => setCurrentTab('incomes')}
-          className={`px-4 py-2 font-medium border-b-2 -mb-0.5 transition-colors ${
+          className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium border-b-2 -mb-0.5 transition-all duration-300 whitespace-nowrap text-sm sm:text-base ${
             currentTab === 'incomes'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              ? 'border-primary text-primary scale-105'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
           }`}
         >
-          Ingresos ({regularIncomes.length})
+          Ingresos ({allRegularIncomes.length})
         </button>
         <button
           onClick={() => setCurrentTab('salaries')}
-          className={`px-4 py-2 font-medium border-b-2 -mb-0.5 transition-colors ${
+          className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium border-b-2 -mb-0.5 transition-all duration-300 whitespace-nowrap text-sm sm:text-base ${
             currentTab === 'salaries'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              ? 'border-primary text-primary scale-105'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
           }`}
         >
           Salarios ({salaries.length})
@@ -527,52 +584,121 @@ export const IncomePage = () => {
       {/* INCOMES TAB */}
       {currentTab === 'incomes' && (
         <div className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-4">
-            <Card>
+          {/* Filter Section */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">Filtrar Ingresos</h3>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useCustomDateRange}
+                      onChange={(e) => setUseCustomDateRange(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    Rango personalizado
+                  </label>
+                </div>
+
+                {!useCustomDateRange ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Select value={String(filterMonth)} onValueChange={(val) => setFilterMonth(parseInt(val))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Mes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((month, idx) => (
+                          <SelectItem key={idx} value={String(idx + 1)}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={String(filterYear)} onValueChange={(val) => setFilterYear(parseInt(val))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Año" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map((year) => (
+                          <SelectItem key={year} value={String(year)}>
+                            {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="start-date">Desde</Label>
+                      <DatePicker
+                        value={filterStartDate}
+                        onChange={(date) => setFilterStartDate(date)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="end-date">Hasta</Label>
+                      <DatePicker
+                        value={filterEndDate}
+                        onChange={(date) => setFilterEndDate(date)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total de Ingresos</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Total de Ingresos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{regularIncomes.length}</div>
+                <div className="text-xl sm:text-2xl font-bold">{allRegularIncomes.length}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.1s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total de Ingresos</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Confirmados</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{confirmedRegularIncomes}</div>
+                <div className="text-xl sm:text-2xl font-bold">{confirmedRegularIncomes}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.2s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Monto Total</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(regularIncomesTotal)}</div>
+                <div className="text-lg sm:text-2xl font-bold truncate">{formatCurrency(regularIncomesTotal)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.3s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Ingresos</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Promedio</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(regularIncomesTotal)}
+                <div className="text-lg sm:text-2xl font-bold truncate">
+                  {formatCurrency(allRegularIncomes.length > 0 ? regularIncomesTotal / allRegularIncomes.length : 0)}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex gap-2">
-            <Button onClick={() => setShowForm(!showForm)} className="w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <Button 
+              onClick={() => setShowForm(!showForm)} 
+              className="w-full sm:flex-1 transition-all duration-300 hover:scale-105"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Nuevo Ingreso
             </Button>
             <Button 
               onClick={handleGenerateSalaryIncomes} 
               variant="outline" 
-              className="w-full sm:w-auto"
+              className="w-full sm:flex-1 transition-all duration-300 hover:scale-105"
               disabled={loading}
             >
               <TrendingUp className="h-4 w-4 mr-2" />
@@ -581,9 +707,9 @@ export const IncomePage = () => {
           </div>
 
           {showForm && (
-            <Card>
+            <Card className="animate-slide-in-up border-2 border-primary/20">
               <CardHeader>
-                <CardTitle>{editingId ? 'Editar' : 'Nuevo'} Ingreso</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">{editingId ? 'Editar' : 'Nuevo'} Ingreso</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -598,22 +724,23 @@ export const IncomePage = () => {
                     />
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="amount">Monto *</Label>
+                      <Label htmlFor="amount" className="text-sm">Monto *</Label>
                       <Input
                         id="amount"
                         type="number"
                         step="0.01"
                         value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => setFormData({ ...formData, amount: parseDecimalAmount(e.target.value) })}
                         required
+                        className="transition-all duration-300 focus:scale-105"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="currency_id">Moneda *</Label>
+                      <Label htmlFor="currency_id" className="text-sm">Moneda *</Label>
                       <Select value={formData.currency_id} onValueChange={(value) => setFormData({ ...formData, currency_id: value })}>
-                        <SelectTrigger>
+                        <SelectTrigger className="transition-all duration-300 focus:scale-105">
                           <SelectValue placeholder="Seleccionar moneda" />
                         </SelectTrigger>
                         <SelectContent>
@@ -665,11 +792,11 @@ export const IncomePage = () => {
                     />
                   </div>
 
-                  <div className="flex gap-2 justify-end">
-                    <Button type="button" variant="outline" onClick={resetForm}>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                    <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                       Cancelar
                     </Button>
-                    <Button type="submit">
+                    <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                       {editingId ? 'Actualizar' : 'Crear'} Ingreso
                     </Button>
                   </div>
@@ -678,54 +805,84 @@ export const IncomePage = () => {
             </Card>
           )}
 
-          <DataTable
-            data={[...regularIncomes, ...generatedSalaryIncomes]}
-            columns={incomeColumns}
-            loading={loading}
-            pagination={{
-              page,
-              limit: 10,
-              total: regularIncomes.length + generatedSalaryIncomes.length,
-              onPageChange: fetchIncomes,
-            }}
-          />
+          {/* Show pending incomes (generated but not confirmed) */}
+          {allGeneratedSalaryIncomes.filter(i => !i.is_confirmed).length > 0 && (
+            <Card className="border-yellow-200 dark:border-yellow-900">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span className="text-yellow-600 dark:text-yellow-400">⚠️</span>
+                  Ingresos Pendientes de Confirmación
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Estos ingresos fueron generados automáticamente desde tu horario de salario. Confírmalos para agregarlos a tu balance.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  data={allGeneratedSalaryIncomes.filter(i => !i.is_confirmed)}
+                  columns={incomeColumns}
+                  loading={loading}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Show confirmed incomes */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Ingresos Confirmados</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={[...allRegularIncomes, ...allGeneratedSalaryIncomes].filter(i => i.is_confirmed)}
+                columns={incomeColumns}
+                loading={loading}
+                pagination={{
+                  page,
+                  limit: 10,
+                  total: [...allRegularIncomes, ...allGeneratedSalaryIncomes].filter(i => i.is_confirmed).length,
+                  onPageChange: fetchIncomes,
+                }}
+              />
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {/* SALARIES TAB */}
       {currentTab === 'salaries' && (
-        <div className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-4">
-            <Card>
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total de Salarios</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Total de Salarios</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{salaries.length}</div>
+                <div className="text-xl sm:text-2xl font-bold">{salaries.length}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.1s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Salarios Activos</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Salarios Activos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{activeSalaries}</div>
+                <div className="text-xl sm:text-2xl font-bold">{activeSalaries}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.2s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Monto Total</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(salaryTotal)}</div>
+                <div className="text-lg sm:text-2xl font-bold truncate">{formatCurrency(salaryTotal)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.3s' }}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Próximos Pagos</CardTitle>
+                <CardTitle className="text-xs sm:text-sm font-medium">Próximos Pagos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-xl sm:text-2xl font-bold">
                   {salaries.filter(s => s.next_generation_date && new Date(s.next_generation_date) > new Date()).length}
                 </div>
               </CardContent>
@@ -781,15 +938,15 @@ export const IncomePage = () => {
             )}
           </div>
 
-          <Button onClick={() => setShowSalaryForm(!showSalaryForm)} className="w-full sm:w-auto">
+          <Button onClick={() => setShowSalaryForm(!showSalaryForm)} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
             <Plus className="h-4 w-4 mr-2" />
             Nueva Fuente de Salario
           </Button>
 
           {showSalaryForm && (
-            <Card>
+            <Card className="animate-slide-in-up border-2 border-primary/20">
               <CardHeader>
-                <CardTitle>{editingSalaryId ? 'Editar' : 'Nueva'} Fuente de Salario</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">{editingSalaryId ? 'Editar' : 'Nueva'} Fuente de Salario</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSalarySubmit} className="space-y-4">
@@ -833,22 +990,23 @@ export const IncomePage = () => {
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="salary-amount">Monto</Label>
+                      <Label htmlFor="salary-amount" className="text-sm">Monto</Label>
                       <Input
                         id="salary-amount"
                         type="number"
                         step="0.01"
                         value={salaryFormData.amount}
-                        onChange={(e) => setSalaryFormData({ ...salaryFormData, amount: parseFloat(e.target.value) })}
+                        onChange={(e) => setSalaryFormData({ ...salaryFormData, amount: parseDecimalAmount(e.target.value) })}
                         required
+                        className="transition-all duration-300 focus:scale-105"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="salary-currency">Moneda</Label>
+                      <Label htmlFor="salary-currency" className="text-sm">Moneda</Label>
                       <Select value={salaryFormData.currency_id} onValueChange={(value) => setSalaryFormData({ ...salaryFormData, currency_id: value })}>
-                        <SelectTrigger>
+                        <SelectTrigger className="transition-all duration-300 focus:scale-105">
                           <SelectValue placeholder="Seleccionar moneda" />
                         </SelectTrigger>
                         <SelectContent>
@@ -864,11 +1022,11 @@ export const IncomePage = () => {
 
                   {salaryFormData.type === 'fixed' && (
                     <>
-                      <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div>
-                          <Label htmlFor="salary-frequency">Frecuencia</Label>
+                          <Label htmlFor="salary-frequency" className="text-sm">Frecuencia</Label>
                           <Select value={salaryFormData.frequency} onValueChange={(value) => setSalaryFormData({ ...salaryFormData, frequency: value as SalaryFrequency })}>
-                            <SelectTrigger>
+                            <SelectTrigger className="transition-all duration-300 focus:scale-105">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -878,7 +1036,7 @@ export const IncomePage = () => {
                           </Select>
                         </div>
                         <div>
-                          <Label htmlFor="salary-day">Día de Pago</Label>
+                          <Label htmlFor="salary-day" className="text-sm">Día de Pago</Label>
                           <Input
                             id="salary-day"
                             type="number"
@@ -887,10 +1045,11 @@ export const IncomePage = () => {
                             value={salaryFormData.salary_day}
                             onChange={(e) => setSalaryFormData({ ...salaryFormData, salary_day: parseInt(e.target.value) || 1 })}
                             placeholder={salaryFormData.frequency === 'monthly' ? 'Ej: 15' : 'Ej: 1 (Lunes)'}
+                            className="transition-all duration-300 focus:scale-105"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="salary-date">Fecha de Inicio</Label>
+                          <Label htmlFor="salary-date" className="text-sm">Fecha de Inicio</Label>
                           <DatePicker
                             value={salaryFormData.start_date}
                             onChange={(date) => setSalaryFormData({ ...salaryFormData, start_date: date })}
@@ -927,11 +1086,11 @@ export const IncomePage = () => {
                     />
                   </div>
 
-                  <div className="flex gap-2 justify-end">
-                    <Button type="button" variant="outline" onClick={resetSalaryForm}>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                    <Button type="button" variant="outline" onClick={resetSalaryForm} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                       Cancelar
                     </Button>
-                    <Button type="submit">
+                    <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                       {editingSalaryId ? 'Actualizar' : 'Crear'} Salario
                     </Button>
                   </div>

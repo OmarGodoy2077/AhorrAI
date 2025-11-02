@@ -21,6 +21,9 @@ router.post('/:id/include-in-global', authenticate, SavingsGoalController.setAsG
 router.get('/goals/custom', authenticate, SavingsGoalController.getCustomGoals);
 router.get('/goals/global-contributors', authenticate, SavingsGoalController.getGlobalContributors);
 
+// Update calculated goals (monthly/global)
+router.post('/update-calculated', authenticate, SavingsGoalController.updateCalculatedGoals);
+
 // Deprecated endpoint (kept for compatibility, returns error)
 router.post('/:id/deposit', authenticate, SavingsGoalController.depositToGoal);
 

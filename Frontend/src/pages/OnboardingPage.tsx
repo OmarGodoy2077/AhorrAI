@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { Progress } from '@/components/ui/progress'
+import { getTodayGuatemalaDate } from '@/lib/utils'
 
 export const OnboardingPage = () => {
   const navigate = useNavigate()
@@ -65,7 +66,7 @@ export const OnboardingPage = () => {
       setLoading(true)
       await financialSettingService.create({
         ...financialForm,
-        effective_date: new Date().toISOString().split('T')[0],
+        effective_date: getTodayGuatemalaDate(),
       })
       setStep(2)
     } catch (err) {

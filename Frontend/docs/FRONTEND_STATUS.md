@@ -52,11 +52,23 @@
 - **API Integration:** Service API completamente integrado
 - **Características:** Tipos de categorías, descripciones, jerarquía
 
-### 8. Gestión de Ahorros
-- **Estado:** Completado
+### 8. Gestión de Ahorros (SavingsPage)
+- **Estado:** Completado (v2.2+ con mejoras)
 - **Componentes:** CRUD de metas y depósitos, tipos de metas (mensual/global/personalizada)
-- **API Integration:** Service API completamente integrado
-- **Características:** Seguimiento de progreso, visualización de objetivos
+- **API Integration:** Service API completamente integrado con source_account_id
+- **Características:** 
+  - Seguimiento de progreso con visualización avanzada
+  - Visualización de objetivos por tipo de meta
+  - **NUEVO (v2.2)**: Selector de cuenta origen para depósitos (con validación de saldo)
+  - **NUEVO (v2.2)**: Configuración inline de metas monthly/global en pestañas correspondientes
+  - **NUEVO (v2.2)**: Transferencia de dinero desde meta virtual a cuenta real
+  - Cálculo automático de progreso based en depósitos reales
+- **Características Avanzadas**:
+  - Tres tipos de metas independientes (custom, monthly, global)
+  - Stats summary con 4 tarjetas de resumen
+  - DataTable responsiva para listar metas personalizadas
+  - Depósitos conectados automáticamente a desembolso desde cuenta origen
+  - Trigger automático que deduce dinero de cuenta real y deposita en virtual
 
 ### 9. Configuración de Usuario
 - **Estado:** Completado

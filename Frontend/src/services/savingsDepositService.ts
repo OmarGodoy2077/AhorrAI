@@ -11,9 +11,13 @@ interface MonthlySavingsStatus {
 export const savingsDepositService = {
   /**
    * Crear un nuevo depósito de ahorro
+   * Soporta depósitos a metas (goal_id) o a cuentas fantasma (virtual_account_id)
+   * El dinero se resta de source_account_id (cuenta real)
    */
   async create(data: {
-    goal_id: string
+    goal_id?: string
+    virtual_account_id?: string
+    source_account_id: string
     amount: number
     deposit_date: string
     description?: string

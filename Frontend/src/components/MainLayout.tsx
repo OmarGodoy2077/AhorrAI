@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { DateTimeDisplay } from '@/components/DateTimeDisplay'
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -68,10 +69,15 @@ export const MainLayout = () => {
 
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {user?.full_name}
-              </span>
+            <div className="hidden sm:flex items-center gap-4">
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-medium">
+                  {user?.full_name}
+                </span>
+                <time className="text-xs text-muted-foreground" dateTime={new Date().toISOString()}>
+                  <DateTimeDisplay />
+                </time>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

@@ -156,6 +156,18 @@ const SavingsGoal = {
             .order('created_at', { ascending: false });
         if (error) throw error;
         return goals;
+    },
+
+    // Find goal by virtual account ID
+    async findByVirtualAccountId(virtualAccountId) {
+        const database = getDatabase();
+        const { data: goal, error } = await database
+            .from('savings_goals')
+            .select('*')
+            .eq('virtual_account_id', virtualAccountId)
+            .single();
+        if (error && error.code !== 'PGRST116') throw error;
+        return goal;
     }
 };
 

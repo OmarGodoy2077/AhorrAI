@@ -1,4 +1,5 @@
 const { Income } = require('../models');
+const { getTodayGuatemalaString, getNowGuatemala, getTodayDayOfMonth, parseGuatemalaDate, isDateTodayOrPast } = require('../utils/dateUtils');
 
 const IncomeController = {
     async createIncome(req, res) {
@@ -67,15 +68,16 @@ const IncomeController = {
                 return res.status(404).json({ error: 'Income not found' });
             }
 
-            // If this is a confirmed generated salary income, revert the schedule state
-            if (income.is_confirmed && income.description && income.description.includes('Generado desde:')) {
+            // If this is a generated salary income, we can allow deletion
+            // The schedule will handle regeneration if needed
+            if (income.description && income.description.includes('Generado desde:')) {
                 const database = require('../config').database;
                 const userId = req.user.userId;
 
                 // Extract schedule name from description: "Generado desde: ScheduleName - frequency"
-                const scheduleNameMatch = income.description.match(/Generado desde:\s*([^-\s]+)/);
+                const scheduleNameMatch = income.description.match(/Generado desde:\s*([^-]+)/);
                 if (scheduleNameMatch) {
-                    const scheduleName = scheduleNameMatch[1];
+                    const scheduleName = scheduleNameMatch[1].trim();
 
                     // Find the corresponding salary schedule
                     const { data: schedule } = await database
@@ -86,30 +88,33 @@ const IncomeController = {
                         .eq('is_active', true)
                         .single();
 
-                    if (schedule) {
-                        // Calculate what the next_generation_date should be if we revert this confirmation
-                        // Set it back to the date of the income being deleted
+                    if (schedule && income.is_confirmed) {
+                        // Only revert schedule state if the income was confirmed
+                        // Calculate what the next_generation_date should be
                         const incomeDate = new Date(income.income_date);
                         
-                        // For monthly schedules, set next_generation_date to the income date
-                        // This will allow regeneration of this specific month's income
-                        const revertedNextGenerationDate = income.income_date;
-
-                        // Update the salary schedule to revert the state
-                        await database
-                            .from('salary_schedules')
-                            .update({
-                                next_generation_date: revertedNextGenerationDate,
-                                updated_at: new Date().toISOString()
-                            })
-                            .eq('id', schedule.id);
+                        // Check if this income date is before the current next_generation_date
+                        const currentNextDate = schedule.next_generation_date ? new Date(schedule.next_generation_date) : null;
+                        
+                        if (!currentNextDate || incomeDate < currentNextDate) {
+                            // Set next_generation_date to the deleted income's date
+                            // This allows regeneration
+                            await database
+                                .from('salary_schedules')
+                                .update({
+                                    next_generation_date: income.income_date,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', schedule.id);
+                        }
                     }
                 }
             }
 
-            // Allow deletion of any income (confirmed or not)
+            // Delete the income
+            // The trigger will handle balance adjustments
             await Income.delete(req.params.id);
-            res.json({ message: 'Income deleted successfully' });
+            res.json({ message: 'Ingreso eliminado exitosamente' });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -142,16 +147,27 @@ const IncomeController = {
                         .single();
 
                     if (schedule) {
-                        // Calculate next generation date based on the confirmed income date
-                        const confirmedDate = new Date(income.income_date);
+                        // Calculate next generation date based on the schedule's salary_day
+                        // NOT based on when it's confirmed - always generate on the salary_day
                         let nextGenerationDate;
 
                         if (schedule.frequency === 'monthly') {
-                            // Move to next month, same day
-                            nextGenerationDate = new Date(confirmedDate);
-                            nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
+                            // For monthly schedules, next generation is always on salary_day of next month
+                            // This ensures consistency: if salary_day is 1, generate always on 1st of next month
+                            const now = getNowGuatemala();
+                            const currentYear = now.getFullYear();
+                            const currentMonth = now.getMonth();
+                            
+                            // Calculate the next occurrence of salary_day
+                            nextGenerationDate = new Date(currentYear, currentMonth + 1, schedule.salary_day);
+                            
+                            // If that date is in the past, move to the month after
+                            if (nextGenerationDate < now) {
+                                nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
+                            }
                         } else if (schedule.frequency === 'weekly') {
-                            // Move to next week, same day of week
+                            // For weekly schedules, next generation is 7 days from the confirmed date
+                            const confirmedDate = parseGuatemalaDate(income.income_date);
                             nextGenerationDate = new Date(confirmedDate);
                             nextGenerationDate.setDate(nextGenerationDate.getDate() + 7);
                         }
@@ -182,8 +198,8 @@ const IncomeController = {
         try {
             const database = require('../config').database;
             const userId = req.user.userId;
-            const now = new Date();
-            const currentDate = now.toISOString().split('T')[0];
+            const now = getNowGuatemala();
+            const currentDate = getTodayGuatemalaString();
             
             // Function to get month name in Spanish
             const getMonthName = (monthIndex) => {
@@ -202,13 +218,24 @@ const IncomeController = {
                 .eq('is_active', true)
                 .eq('type', 'fixed');
                 
-            if (error) throw error;
+            if (error) {
+                console.error('Error fetching salary schedules:', error);
+                throw error;
+            }
+            
+            // Check if there are any schedules
+            if (!salarySchedules || salarySchedules.length === 0) {
+                return res.json({ 
+                    message: 'No hay horarios de salario activos configurados',
+                    generated: [] 
+                });
+            }
             
             const generatedIncomes = [];
             
             for (const schedule of salarySchedules) {
                 // Calculate all payment dates from start_date to today that don't have incomes yet
-                const startDate = new Date(schedule.start_date);
+                const startDate = parseGuatemalaDate(schedule.start_date);
                 const paymentDates = [];
                 
                 if (schedule.frequency === 'monthly') {
@@ -220,7 +247,7 @@ const IncomeController = {
                         currentPaymentDate.setMonth(currentPaymentDate.getMonth() + 1);
                     }
                     
-                    // Generate all payment dates up to today
+                    // Generate all payment dates up to today (Guatemala timezone)
                     while (currentPaymentDate <= now) {
                         paymentDates.push(new Date(currentPaymentDate));
                         currentPaymentDate.setMonth(currentPaymentDate.getMonth() + 1);
@@ -248,66 +275,119 @@ const IncomeController = {
                 for (const paymentDate of paymentDates) {
                     const paymentDateStr = paymentDate.toISOString().split('T')[0];
                     
-                    // Create descriptive name with month
+                    // Create descriptive name with schedule name, month and year
+                    // This ensures uniqueness when multiple schedules exist
                     const monthName = getMonthName(paymentDate.getMonth());
-                    const incomeName = `Salario mes de ${monthName}`;
+                    const year = paymentDate.getFullYear();
+                    const incomeName = `${schedule.name} ${monthName} ${year}`;
                     
                     // Check if income already exists for this date and schedule
-                    const { data: existingData } = await database
+                    const { data: existingData, error: checkError } = await database
                         .from('income_sources')
                         .select('id')
                         .eq('user_id', userId)
-                        .eq('name', incomeName)
+                        .ilike('description', `%${schedule.name}%`)
                         .eq('income_date', paymentDateStr);
+                    
+                    if (checkError) {
+                        console.error('Error checking existing income:', checkError);
+                        continue; // Skip this date if there's an error
+                    }
                     
                     // Only generate if no income exists for this exact period
                     if (!existingData || existingData.length === 0) {
-                        // Generate new income entry
-                        const newIncome = {
-                            user_id: userId,
-                            name: incomeName,
-                            type: 'fixed',
-                            amount: schedule.amount,
-                            currency_id: schedule.currency_id,
-                            frequency: 'one-time', // Generated incomes are one-time
-                            income_date: paymentDateStr,
-                            description: `Generado desde: ${schedule.name} - ${schedule.frequency}`,
-                            account_id: schedule.account_id,
-                            is_confirmed: false, // Generated incomes need confirmation
-                            is_salary: true // Mark as generated salary
-                        };
-                        
-                        const createdIncome = await Income.create(newIncome);
-                        generatedIncomes.push(createdIncome);
+                        try {
+                            // Generate new income entry
+                            const newIncome = {
+                                user_id: userId,
+                                name: incomeName,
+                                type: 'fixed',
+                                amount: schedule.amount,
+                                currency_id: schedule.currency_id,
+                                frequency: 'one-time', // Generated incomes are one-time
+                                income_date: paymentDateStr,
+                                description: `Generado desde: ${schedule.name} - ${schedule.frequency}`,
+                                account_id: schedule.account_id,
+                                is_confirmed: false // Generated incomes need confirmation
+                            };
+                            
+                            const createdIncome = await Income.create(newIncome);
+                            generatedIncomes.push(createdIncome);
+                        } catch (createError) {
+                            console.error('Error creating income for date', paymentDateStr, ':', createError);
+                            // Continue with next date
+                        }
                     }
                 }
                 
                 // Update the salary schedule with new generation dates
-                // Find the next future payment date after today
+                // The next_generation_date should be the LAST date we just generated + 1 period
                 let nextGenerationDate;
-                if (schedule.frequency === 'monthly') {
-                    const lastPayment = paymentDates[paymentDates.length - 1] || new Date(schedule.start_date);
-                    nextGenerationDate = new Date(lastPayment);
-                    nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
-                } else if (schedule.frequency === 'weekly') {
-                    const lastPayment = paymentDates[paymentDates.length - 1] || new Date(schedule.start_date);
-                    nextGenerationDate = new Date(lastPayment);
-                    nextGenerationDate.setDate(nextGenerationDate.getDate() + 7);
+                let lastGenerated = null;
+                
+                if (paymentDates.length > 0) {
+                    // Get the last generated date
+                    const lastPaymentDate = paymentDates[paymentDates.length - 1];
+                    lastGenerated = lastPaymentDate.toISOString().split('T')[0];
+                    
+                    // Calculate next generation date based on the last one we generated
+                    if (schedule.frequency === 'monthly') {
+                        nextGenerationDate = new Date(lastPaymentDate);
+                        nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
+                    } else if (schedule.frequency === 'weekly') {
+                        nextGenerationDate = new Date(lastPaymentDate);
+                        nextGenerationDate.setDate(nextGenerationDate.getDate() + 7);
+                    }
+                } else {
+                    // No payment dates were generated, calculate next from start_date
+                    if (schedule.frequency === 'monthly') {
+                        const startDate = parseGuatemalaDate(schedule.start_date);
+                        nextGenerationDate = new Date(startDate.getFullYear(), startDate.getMonth(), schedule.salary_day);
+                        
+                        // If salary day is before start date in that month, move to next month
+                        if (nextGenerationDate < startDate) {
+                            nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
+                        }
+                        
+                        // Make sure it's in the future
+                        while (nextGenerationDate <= now) {
+                            nextGenerationDate.setMonth(nextGenerationDate.getMonth() + 1);
+                        }
+                    } else if (schedule.frequency === 'weekly') {
+                        const startDate = parseGuatemalaDate(schedule.start_date);
+                        nextGenerationDate = new Date(startDate);
+                        
+                        // Calculate first occurrence after start_date
+                        const startDayOfWeek = startDate.getDay();
+                        const targetDayOfWeek = schedule.salary_day;
+                        let daysToAdd = (targetDayOfWeek - startDayOfWeek + 7) % 7;
+                        if (daysToAdd === 0) daysToAdd = 7;
+                        nextGenerationDate.setDate(startDate.getDate() + daysToAdd);
+                        
+                        // Make sure it's in the future
+                        while (nextGenerationDate <= now) {
+                            nextGenerationDate.setDate(nextGenerationDate.getDate() + 7);
+                        }
+                    }
                 }
                 
-                // Update the schedule
+                // Update the schedule with new dates
                 await database
                     .from('salary_schedules')
                     .update({
-                        last_generated_date: currentDate,
-                        next_generation_date: nextGenerationDate.toISOString().split('T')[0],
+                        last_generated_date: lastGenerated || currentDate,
+                        next_generation_date: nextGenerationDate ? nextGenerationDate.toISOString().split('T')[0] : null,
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', schedule.id);
             }
             
+            const message = generatedIncomes.length > 0 
+                ? `Se generaron ${generatedIncomes.length} ingresos de salario`
+                : 'No hay nuevos salarios para generar';
+                
             res.json({ 
-                message: `Generated ${generatedIncomes.length} income entries`,
+                message,
                 generated: generatedIncomes 
             });
         } catch (error) {

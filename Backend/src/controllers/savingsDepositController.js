@@ -3,16 +3,28 @@ const { SavingsDeposit, SavingsGoal, FinancialSetting } = require('../models');
 const SavingsDepositController = {
     async createDeposit(req, res) {
         try {
-            const { goal_id, amount, deposit_date, description } = req.body;
+            const { goal_id, virtual_account_id, source_account_id, amount, deposit_date, description } = req.body;
 
-            // Validate required fields
-            if (!goal_id || !amount) {
+            // Validate that either goal_id or virtual_account_id is provided (but not both)
+            if (!amount) {
                 return res.status(400).json({
                     error: 'Validation failed',
-                    details: [
-                        { field: 'goal_id', message: 'Goal ID is required' },
-                        { field: 'amount', message: 'Amount is required' }
-                    ]
+                    details: [{ field: 'amount', message: 'Amount is required' }]
+                });
+            }
+
+            if (!goal_id && !virtual_account_id) {
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    details: [{ field: 'goal_id', message: 'Either goal_id or virtual_account_id is required' }]
+                });
+            }
+
+            // Validate source_account_id is provided
+            if (!source_account_id) {
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    details: [{ field: 'source_account_id', message: 'Source account is required' }]
                 });
             }
 
@@ -24,15 +36,61 @@ const SavingsDepositController = {
                 });
             }
 
-            // Verify the goal exists and belongs to the user
-            const goal = await SavingsGoal.findById(goal_id);
-            if (!goal || goal.user_id !== req.user.userId) {
-                return res.status(404).json({ error: 'Savings goal not found' });
+            // If depositing to a goal, verify it exists and belongs to the user
+            if (goal_id) {
+                const goal = await SavingsGoal.findById(goal_id);
+                if (!goal || goal.user_id !== req.user.userId) {
+                    return res.status(404).json({ error: 'Savings goal not found' });
+                }
+                
+                // Verify the goal has a virtual account (required for custom goals)
+                if (goal.goal_type === 'custom' && !goal.virtual_account_id) {
+                    return res.status(400).json({ 
+                        error: 'La meta no tiene cuenta virtual asociada. Por favor elimine y vuelva a crear la meta.' 
+                    });
+                }
+                
+                // Auto-set virtual_account_id from the goal if not provided
+                if (goal.virtual_account_id && !virtual_account_id) {
+                    // This will be used by the trigger
+                    req.body.virtual_account_id = goal.virtual_account_id;
+                }
+            }
+
+            // If depositing to a virtual account, verify it exists and belongs to the user
+            if (virtual_account_id) {
+                const { Account } = require('../models');
+                const account = await Account.findById(virtual_account_id);
+                if (!account || account.user_id !== req.user.userId || !account.is_virtual_account) {
+                    return res.status(404).json({ error: 'Virtual account not found' });
+                }
+
+                // If no goal_id provided, try to find the goal associated with this virtual account
+                if (!goal_id) {
+                    const associatedGoal = await SavingsGoal.findByVirtualAccountId(virtual_account_id);
+                    if (associatedGoal) {
+                        req.body.goal_id = associatedGoal.id;
+                    }
+                }
+            }
+
+            // Verify source account exists and belongs to the user
+            const { Account } = require('../models');
+            const sourceAccount = await Account.findById(source_account_id);
+            if (!sourceAccount || sourceAccount.user_id !== req.user.userId) {
+                return res.status(404).json({ error: 'Source account not found' });
+            }
+
+            // Verify source account has sufficient balance
+            if (sourceAccount.balance < amount) {
+                return res.status(400).json({ error: 'Insufficient balance in source account' });
             }
 
             // Create the deposit
             const data = {
-                goal_id,
+                goal_id: goal_id || null,
+                virtual_account_id: virtual_account_id || null,
+                source_account_id: source_account_id,
                 user_id: req.user.userId,
                 amount,
                 deposit_date: deposit_date || new Date().toISOString().split('T')[0],

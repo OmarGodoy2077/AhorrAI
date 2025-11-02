@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useAuth } from '@/context/AuthContext'
 import { useCurrency } from '@/context/CurrencyContext'
+import { getTodayGuatemalaDate } from '@/lib/utils'
 
 export const SettingsPage = () => {
   const { user, logout } = useAuth()
@@ -22,8 +23,6 @@ export const SettingsPage = () => {
   })
 
   const [financialForm, setFinancialForm] = useState({
-    salary: 0,
-    monthly_savings_target: 0,
     default_currency_id: '',
   })
 
@@ -44,7 +43,7 @@ export const SettingsPage = () => {
         default_currency_id: defaultCurrency.id,
       }))
     }
-  }, [defaultCurrency, currentSetting, currencies])
+  }, [defaultCurrency, currentSetting])
 
   const fetchCurrentFinancialSetting = async () => {
     if (currencies.length === 0) return;
@@ -53,8 +52,6 @@ export const SettingsPage = () => {
       const setting = await financialSettingService.getCurrent()
       setCurrentSetting(setting)
       setFinancialForm({
-        salary: setting.salary || 0,
-        monthly_savings_target: setting.monthly_savings_target || 0,
         default_currency_id: setting.default_currency_id || '',
       })
       // Set default currency if exists
@@ -69,8 +66,6 @@ export const SettingsPage = () => {
       console.log('No financial setting found yet')
       setCurrentSetting(null)
       setFinancialForm({
-        salary: 0,
-        monthly_savings_target: 0,
         default_currency_id: defaultCurrency?.id || '',
       })
     }
@@ -97,16 +92,18 @@ export const SettingsPage = () => {
       setError('')
       setSuccess('')
       setLoading(true)
+      
       if (currentSetting) {
         await financialSettingService.update(currentSetting.id, financialForm)
       } else {
         await financialSettingService.create({
           ...financialForm,
-          effective_date: new Date().toISOString().split('T')[0],
+          effective_date: getTodayGuatemalaDate(),
         })
         // Refresh to get the new setting
         await fetchCurrentFinancialSetting()
       }
+      
       setSuccess('Configuración financiera actualizada')
     } catch (err) {
       setError(getErrorMessage(err))
@@ -206,55 +203,14 @@ export const SettingsPage = () => {
       <Card>
         <CardHeader>
           <CardTitle>Configuración Financiera</CardTitle>
-          <CardDescription>Establece tu salario y meta de ahorro mensual</CardDescription>
+          <CardDescription>Configura tu moneda por defecto</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleFinancialSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="salary">Salario Mensual</Label>
-              <Input
-                id="salary"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={financialForm.salary}
-                onChange={(e) =>
-                  setFinancialForm({
-                    ...financialForm,
-                    salary: parseFloat(e.target.value),
-                  })
-                }
-                required
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Se utiliza para calcular el rendimiento
-              </p>
-            </div>
-
-            <div>
-              <Label htmlFor="monthly_savings_target">Meta de Ahorro Mensual</Label>
-              <Input
-                id="monthly_savings_target"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={financialForm.monthly_savings_target}
-                onChange={(e) =>
-                  setFinancialForm({
-                    ...financialForm,
-                    monthly_savings_target: parseFloat(e.target.value),
-                  })
-                }
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Cantidad que deseas ahorrar cada mes
-              </p>
-            </div>
-
-            <div>
               <Label htmlFor="default_currency">Moneda por Defecto</Label>
               <Select
-                value={financialForm.default_currency_id || defaultCurrency?.id || ''}
+                value={financialForm.default_currency_id || defaultCurrency?.id || (currencies.length > 0 ? currencies[0].id : '')}
                 onValueChange={(value) => {
                   setFinancialForm(prev => ({ ...prev, default_currency_id: value }))
                   const currency = currencies.find(c => c.id === value)

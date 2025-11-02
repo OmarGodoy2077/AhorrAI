@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Currency } from '@/types';
 import { currencyService } from '@/services';
 import { financialSettingService } from '@/services';
+import { getTodayGuatemalaDate } from '@/lib/utils';
 
 interface CurrencyContextType {
   defaultCurrency: Currency | null;
@@ -43,17 +44,24 @@ export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) 
     if (currencies.length === 0) return;
 
     try {
-      const settings = await financialSettingService.getCurrent();
-      if (settings?.default_currency_id) {
-        const currency = currencies.find(c => c.id === settings.default_currency_id);
-        if (currency) {
-          setDefaultCurrencyState(currency);
-          return;
+      try {
+        const settings = await financialSettingService.getCurrent();
+        if (settings?.default_currency_id) {
+          const currency = currencies.find(c => c.id === settings.default_currency_id);
+          if (currency) {
+            setDefaultCurrencyState(currency);
+            return;
+          }
         }
+      } catch (error: any) {
+        // 404 is expected if user hasn't created settings yet
+        if (error?.response?.status !== 404) {
+          throw error;
+        }
+        // If 404, just continue to fallback
       }
     } catch (error) {
-      // Settings not found or error, continue to fallback
-      console.log('No financial settings found, using fallback currency');
+      console.error('Error loading default currency:', error);
     }
 
     // Fallback to USD if no settings or error
@@ -79,9 +87,8 @@ export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) 
       } else {
         // Create new settings if none exist
         await financialSettingService.create({
-          salary: 0, // Default
           default_currency_id: currency.id,
-          effective_date: new Date().toISOString().split('T')[0],
+          effective_date: getTodayGuatemalaDate(),
         });
       }
     } catch (error) {

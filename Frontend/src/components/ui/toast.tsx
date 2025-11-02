@@ -1,24 +1,21 @@
 import * as React from "react"
-
-interface ToastProps {
-  id: string
-  title: string
-  description?: string
-  variant?: 'default' | 'destructive' | 'success'
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
+import { CheckCircle, AlertCircle, Info, X } from 'lucide-react'
 
 interface Toast {
   id: string
   title: string
   description?: string
-  variant?: 'default' | 'destructive' | 'success'
+  variant?: 'default' | 'destructive' | 'success' | 'warning' | 'info'
+  duration?: number
 }
 
 const ToastContext = React.createContext<{
   toasts: Toast[]
-  addToast: (toast: Omit<Toast, 'id'>) => void
+  toast: (toast: Omit<Toast, 'id'>) => void
+  success: (title: string, description?: string) => void
+  error: (title: string, description?: string) => void
+  info: (title: string, description?: string) => void
+  warning: (title: string, description?: string) => void
   removeToast: (id: string) => void
 } | null>(null)
 
@@ -27,21 +24,38 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const addToast = React.useCallback((toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9)
+    const duration = toast.duration || 5000
     const newToast = { ...toast, id }
     setToasts((prev) => [...prev, newToast])
 
-    // Auto remove after 5 seconds
+    // Auto remove after duration
     setTimeout(() => {
       removeToast(id)
-    }, 5000)
+    }, duration)
   }, [])
 
   const removeToast = React.useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }, [])
 
+  const success = React.useCallback((title: string, description?: string) => {
+    addToast({ title, description, variant: 'success' })
+  }, [addToast])
+
+  const error = React.useCallback((title: string, description?: string) => {
+    addToast({ title, description, variant: 'destructive' })
+  }, [addToast])
+
+  const info = React.useCallback((title: string, description?: string) => {
+    addToast({ title, description, variant: 'info' })
+  }, [addToast])
+
+  const warning = React.useCallback((title: string, description?: string) => {
+    addToast({ title, description, variant: 'warning' })
+  }, [addToast])
+
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastContext.Provider value={{ toasts, toast: addToast, success, error, info, warning, removeToast }}>
       {children}
     </ToastContext.Provider>
   )
@@ -55,34 +69,69 @@ export function useToast() {
   return context
 }
 
-export function Toast({
-  title,
-  description,
-  variant = 'default',
-  open,
-  onOpenChange,
-}: ToastProps) {
-  React.useEffect(() => {
-    if (open) {
-      const timer = setTimeout(() => onOpenChange(false), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [open, onOpenChange])
+function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) {
+  const [isExiting, setIsExiting] = React.useState(false)
 
-  if (!open) return null
-
-  const variantClasses = {
-    default: 'bg-foreground text-background',
-    destructive: 'bg-destructive text-destructive-foreground',
-    success: 'bg-green-600 text-white',
+  const handleRemove = () => {
+    setIsExiting(true)
+    setTimeout(() => {
+      onRemove()
+    }, 300)
   }
+
+  const variants = {
+    default: {
+      bg: 'bg-card border-border',
+      icon: <Info className="h-5 w-5 text-foreground" />,
+    },
+    destructive: {
+      bg: 'bg-destructive/10 border-destructive/50 dark:bg-destructive/20',
+      icon: <AlertCircle className="h-5 w-5 text-destructive" />,
+    },
+    success: {
+      bg: 'bg-success/10 border-success/50 dark:bg-success/20',
+      icon: <CheckCircle className="h-5 w-5 text-success" />,
+    },
+    warning: {
+      bg: 'bg-warning/10 border-warning/50 dark:bg-warning/20',
+      icon: <AlertCircle className="h-5 w-5 text-warning" />,
+    },
+    info: {
+      bg: 'bg-blue-500/10 border-blue-500/50 dark:bg-blue-500/20',
+      icon: <Info className="h-5 w-5 text-blue-500" />,
+    },
+  }
+
+  const variant = variants[toast.variant || 'default']
 
   return (
     <div
-      className={`fixed bottom-4 right-4 z-50 rounded-lg p-4 ${variantClasses[variant]} shadow-lg animate-in slide-in-from-bottom-5 duration-300`}
+      className={`
+        flex items-start gap-3 p-4 rounded-lg border shadow-lg
+        backdrop-blur-sm transition-all duration-300
+        ${variant.bg}
+        ${isExiting 
+          ? 'animate-out slide-out-to-right-full opacity-0' 
+          : 'animate-in slide-in-from-right-full'
+        }
+        max-w-md w-full sm:w-96
+      `}
     >
-      <div className="font-semibold">{title}</div>
-      {description && <div className="text-sm opacity-90">{description}</div>}
+      <div className="flex-shrink-0 mt-0.5">
+        {variant.icon}
+      </div>
+      <div className="flex-1 space-y-1">
+        <div className="font-semibold text-foreground">{toast.title}</div>
+        {toast.description && (
+          <div className="text-sm text-muted-foreground">{toast.description}</div>
+        )}
+      </div>
+      <button
+        onClick={handleRemove}
+        className="flex-shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   )
 }
@@ -91,20 +140,16 @@ export function Toaster() {
   const { toasts, removeToast } = useToast()
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 space-y-2">
-      {toasts.map((toast) => (
-        <Toast
-          key={toast.id}
-          id={toast.id}
-          title={toast.title}
-          description={toast.description}
-          variant={toast.variant}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) removeToast(toast.id)
-          }}
-        />
-      ))}
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      <div className="pointer-events-auto space-y-2">
+        {toasts.map((toast) => (
+          <ToastItem
+            key={toast.id}
+            toast={toast}
+            onRemove={() => removeToast(toast.id)}
+          />
+        ))}
+      </div>
     </div>
   )
 }

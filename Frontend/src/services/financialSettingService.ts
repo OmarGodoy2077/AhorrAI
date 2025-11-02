@@ -6,8 +6,6 @@ export const financialSettingService = {
    * Crear una nueva configuración financiera
    */
   async create(data: {
-    salary: number
-    monthly_savings_target?: number
     default_currency_id?: string
     effective_date?: string
   }): Promise<FinancialSetting> {
@@ -60,8 +58,6 @@ export const financialSettingService = {
   async update(
     id: string,
     data: Partial<{
-      salary: number
-      monthly_savings_target: number
       default_currency_id: string
       effective_date: string
       is_current: boolean

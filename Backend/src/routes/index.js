@@ -13,6 +13,7 @@ const currencyRoutes = require('./currency');
 const savingsGoalRoutes = require('./savingsGoal');
 const savingsDepositRoutes = require('./savingsDeposit');
 const spendingLimitRoutes = require('./spendingLimit');
+const systemRoutes = require('./system');
 
 const router = express.Router();
 
@@ -28,6 +29,7 @@ router.use('/summaries', summaryRoutes);
 router.use('/loans', loanRoutes);
 router.use('/currencies', currencyRoutes);
 router.use('/savings-goals', savingsGoalRoutes);
+router.use('/system', systemRoutes);
 router.use('/savings-deposits', savingsDepositRoutes);
 router.use('/spending-limits', spendingLimitRoutes);
 

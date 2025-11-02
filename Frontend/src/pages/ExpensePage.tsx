@@ -10,11 +10,12 @@ import { DataTable } from '@/components/ui/DataTable'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Trash2, Edit, Plus } from 'lucide-react'
 import { useFormatCurrency } from '@/hooks/useFormatCurrency'
+import { getTodayGuatemalaDate, parseDecimalAmount } from '@/lib/utils'
 
 type SortBy = 'date' | 'amount' | 'category'
 type SortOrder = 'asc' | 'desc'
 
-export const ExpensePage = () => {
+const ExpensePage = () => {
   const { formatCurrency, defaultCurrency } = useFormatCurrency()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -41,7 +42,7 @@ export const ExpensePage = () => {
   const [formData, setFormData] = useState({
     amount: 0,
     currency_id: defaultCurrency?.id || '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: getTodayGuatemalaDate(),
     description: '',
     category_id: 'no-category',
     account_id: 'no-account',
@@ -79,7 +80,9 @@ export const ExpensePage = () => {
   const fetchAccounts = async () => {
     try {
       const response = await accountService.getAll({ limit: 100 })
-      setAccounts(response.data)
+      // Filter out virtual accounts - they are only for savings goals
+      const realAccounts = response.data.filter(account => !account.is_virtual_account)
+      setAccounts(realAccounts)
     } catch (err) {
       console.error(getErrorMessage(err))
     }
@@ -154,7 +157,7 @@ export const ExpensePage = () => {
     setFormData({
       amount: 0,
       currency_id: defaultCurrency?.id || '',
-      expense_date: new Date().toISOString().split('T')[0],
+      expense_date: getTodayGuatemalaDate(),
       description: '',
       category_id: 'no-category',
       account_id: 'no-account',
@@ -178,15 +181,15 @@ export const ExpensePage = () => {
     // Filter by date range
     if (useCustomDateRange && filterStartDate && filterEndDate) {
       filtered = filtered.filter(e => {
-        const expenseDate = new Date(e.expense_date)
-        const start = new Date(filterStartDate)
-        const end = new Date(filterEndDate)
+        const expenseDate = new Date(e.expense_date + 'T00:00:00')
+        const start = new Date(filterStartDate + 'T00:00:00')
+        const end = new Date(filterEndDate + 'T23:59:59')
         return expenseDate >= start && expenseDate <= end
       })
-    } else {
-      // Filter by month/year
+    } else if (filterMonth !== 0) {
+      // Filter by month/year (0 means show all months)
       filtered = filtered.filter(e => {
-        const expenseDate = new Date(e.expense_date)
+        const expenseDate = new Date(e.expense_date + 'T00:00:00')
         return expenseDate.getMonth() + 1 === filterMonth && expenseDate.getFullYear() === filterYear
       })
     }
@@ -225,8 +228,15 @@ export const ExpensePage = () => {
 
   const columns = [
     {
+      header: 'Fecha',
+      render: (item: Expense) => {
+        const date = new Date(item.expense_date + 'T00:00:00')
+        return <span className="text-sm font-medium">{date.toLocaleDateString('es-GT', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+      },
+    },
+    {
       header: 'Descripción',
-      render: (item: Expense) => <span className="font-medium">{item.description || 'Sin descripción'}</span>,
+      render: (item: Expense) => <span className="font-medium text-sm">{item.description || 'Sin descripción'}</span>,
     },
     {
       header: 'Categoría',
@@ -270,33 +280,33 @@ export const ExpensePage = () => {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       <div>
-        <h1 className="text-3xl font-bold">Gastos</h1>
-        <p className="text-muted-foreground mt-1">Gestiona tus gastos e ingresos</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Gastos</h1>
+        <p className="text-xs sm:text-base text-muted-foreground mt-1">Gestiona tus gastos</p>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-3 rounded-lg">
           {error}
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 auto-rows-max">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Gastos</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Gastos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalExpenses)}</div>
+            <div className="text-xl sm:text-2xl font-bold truncate">{formatCurrency(totalExpenses)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Necesarios</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Necesarios</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(necessaryTotal)}</div>
+            <div className="text-xl sm:text-2xl font-bold text-red-600 truncate">{formatCurrency(necessaryTotal)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -348,6 +358,7 @@ export const ExpensePage = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="0">Todos los meses</SelectItem>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
                       <SelectItem key={month} value={month.toString()}>
                         {new Date(2024, month - 1).toLocaleDateString('es-ES', { month: 'long' })}
@@ -481,7 +492,7 @@ export const ExpensePage = () => {
                     type="number"
                     step="0.01"
                     value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, amount: parseDecimalAmount(e.target.value) })}
                     required
                   />
                 </div>
@@ -554,3 +565,5 @@ export const ExpensePage = () => {
     </div>
   )
 }
+
+export default ExpensePage

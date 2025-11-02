@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useAuth } from '@/context/AuthContext'
 import { useDashboard } from '@/context/DashboardContext'
 import { Wallet, TrendingDown, PiggyBank, TrendingUp } from 'lucide-react'
@@ -9,17 +10,54 @@ import { Link } from 'react-router-dom'
 
 export const DashboardPage = () => {
   const { user } = useAuth()
-  const { stats, refreshDashboard, isLoading } = useDashboard()
+  const { stats, refreshDashboard, isLoading, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear } = useDashboard()
 
   useEffect(() => {
-    refreshDashboard()
-  }, [refreshDashboard])
+    refreshDashboard(selectedMonth, selectedYear)
+  }, [selectedMonth, selectedYear, refreshDashboard])
+
+  // Get month names in Spanish
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ]
+
+  const currentDate = new Date()
+  const currentMonth = currentDate.getMonth() + 1
+  const currentYear = currentDate.getFullYear()
+
+  // Handle month navigation
+  const handlePreviousMonth = () => {
+    if (selectedMonth === 1) {
+      setSelectedMonth(12)
+      setSelectedYear(selectedYear - 1)
+    } else {
+      setSelectedMonth(selectedMonth - 1)
+    }
+  }
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 12) {
+      setSelectedMonth(1)
+      setSelectedYear(selectedYear + 1)
+    } else {
+      setSelectedMonth(selectedMonth + 1)
+    }
+  }
+
+  const handleToday = () => {
+    setSelectedMonth(currentMonth)
+    setSelectedYear(currentYear)
+  }
+
+  // Generate year options (current year ± 2 years)
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i)
 
  const statsCards = [
     {
-      title: 'Balance Total',
+      title: 'Balance Disponible',
       value: stats.accountBalance,
-      description: 'En todas tus cuentas',
+      description: 'Dinero disponible para gastar',
       icon: Wallet,
       color: 'text-blue-500',
     },
@@ -47,15 +85,79 @@ export const DashboardPage = () => {
   ]
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">
-          ¡Bienvenido, {user?.full_name?.split(' ')[0]}! 👋
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Aquí está un resumen de tus finanzas
-        </p>
+    <div className="space-y-4 sm:space-y-8 animate-fade-in px-2 sm:px-0">
+      {/* Header with Month Selector */}
+      <div className="flex flex-col gap-4 sm:gap-0 sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold truncate">
+            ¡Bienvenido, {user?.full_name?.split(' ')[0]}! 👋
+          </h1>
+          <p className="text-xs sm:text-base text-muted-foreground mt-1 truncate">
+            Resumen de tus finanzas
+          </p>
+        </div>
+
+        {/* Month/Year Selector */}
+        <Card className="w-full md:w-auto overflow-hidden">
+          <CardContent className="p-2 sm:p-4">
+            <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center sm:justify-start">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousMonth}
+                className="text-xs sm:text-sm"
+              >
+                ← Ant
+              </Button>
+              
+              <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(parseInt(val))}>
+                <SelectTrigger className="w-32 sm:w-40 text-xs sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthNames.map((month, idx) => (
+                    <SelectItem key={idx} value={String(idx + 1)}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(parseInt(val))}>
+                <SelectTrigger className="w-20 sm:w-24 text-xs sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextMonth}
+                className="text-xs sm:text-sm"
+              >
+                Sig →
+              </Button>
+
+              {(selectedMonth !== currentMonth || selectedYear !== currentYear) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleToday}
+                  className="text-blue-500 text-xs sm:text-sm"
+                >
+                  Hoy
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Stats Cards */}

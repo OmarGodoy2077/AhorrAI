@@ -1,6 +1,6 @@
 const express = require('express');
 const { FinancialSettingController } = require('../controllers');
-const { authenticate, validateFinancialSetting } = require('../middleware');
+const { authenticate, validateFinancialSetting, validateFinancialSettingUpdate } = require('../middleware');
 
 const router = express.Router();
 
@@ -11,7 +11,7 @@ router.get('/current', authenticate, FinancialSettingController.getCurrentSettin
 router.post('/', authenticate, validateFinancialSetting, FinancialSettingController.createSetting);
 router.get('/', authenticate, FinancialSettingController.getSettings);
 router.get('/:id', authenticate, FinancialSettingController.getSettings);
-router.put('/:id', authenticate, validateFinancialSetting, FinancialSettingController.updateSetting);
+router.put('/:id', authenticate, validateFinancialSettingUpdate, FinancialSettingController.updateSetting);
 router.delete('/:id', authenticate, FinancialSettingController.deleteSetting);
 
 module.exports = router;

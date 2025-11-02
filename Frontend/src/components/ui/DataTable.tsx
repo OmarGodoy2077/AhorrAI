@@ -8,6 +8,7 @@ interface DataTableColumn<T> {
   accessorKey?: keyof T
   render?: (item: T) => React.ReactNode
   className?: string
+  hiddenOn?: 'mobile' | 'tablet' | 'desktop'
 }
 
 interface DataTableProps<T> {
@@ -32,18 +33,25 @@ export function DataTable<T extends { id?: string }>({
 }: DataTableProps<T>) {
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.limit) : 0
 
+  // Get visible columns based on screen size (simplified - desktop shows all)
+  const visibleColumns = columns.filter(col => {
+    if (col.hiddenOn === 'mobile' || col.hiddenOn === 'tablet') return true
+    return true
+  })
+
   return (
-    <div className="space-y-4">
-      <div className="border border-border rounded-lg overflow-hidden">
-        <table className="w-full">
+    <div className="space-y-4 overflow-x-auto">
+      <div className="border border-border rounded-lg overflow-x-auto">
+        <table className="w-full min-w-full">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              {columns.map((column, i) => (
+              {visibleColumns.map((column, i) => (
                 <th
                   key={i}
                   className={cn(
-                    "text-left px-4 py-3 font-semibold text-sm text-foreground",
-                    column.className
+                    "text-left px-3 sm:px-4 py-3 font-semibold text-xs sm:text-sm text-foreground",
+                    column.className,
+                    "whitespace-nowrap"
                   )}
                 >
                   {column.header}
@@ -54,13 +62,13 @@ export function DataTable<T extends { id?: string }>({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={visibleColumns.length} className="px-3 sm:px-4 py-8 text-center text-muted-foreground">
                   Cargando...
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={visibleColumns.length} className="px-3 sm:px-4 py-8 text-center text-muted-foreground">
                   No hay datos disponibles
                 </td>
               </tr>
@@ -72,12 +80,13 @@ export function DataTable<T extends { id?: string }>({
                   onClick={() => onRowClick?.(item)}
                   style={{ cursor: onRowClick ? "pointer" : "default" }}
                 >
-                  {columns.map((column, colIndex) => (
+                  {visibleColumns.map((column, colIndex) => (
                     <td
                       key={colIndex}
                       className={cn(
-                        "px-4 py-3 text-sm text-foreground",
-                        column.className
+                        "px-3 sm:px-4 py-3 text-xs sm:text-sm text-foreground",
+                        column.className,
+                        "max-w-xs sm:max-w-none truncate sm:truncate-none"
                       )}
                     >
                       {column.render ? column.render(item) : String(column.accessorKey ? item[column.accessorKey] : "")}
@@ -91,9 +100,9 @@ export function DataTable<T extends { id?: string }>({
       </div>
 
       {pagination && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Página {pagination.page} de {totalPages} ({pagination.total} resultados)
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-xs sm:text-sm text-muted-foreground">
+            Página {pagination.page} de {totalPages} ({pagination.total})
           </div>
           <div className="flex gap-2">
             <Button

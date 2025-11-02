@@ -1,5 +1,6 @@
 import { Calendar as CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getTodayGuatemalaDate } from "@/lib/utils"
 
 interface DatePickerProps {
   value?: Date | string
@@ -17,7 +18,7 @@ export function DatePicker({
   }
 
   const formatDate = (date: Date | string | undefined) => {
-    if (!date) return ""
+    if (!date) return getTodayGuatemalaDate()
     if (typeof date === "string") return date
     return date.toISOString().split("T")[0]
   }

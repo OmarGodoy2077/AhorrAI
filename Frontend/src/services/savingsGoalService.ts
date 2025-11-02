@@ -4,6 +4,8 @@ import type { SavingsGoal, PaginatedResponse } from '@/types'
 export const savingsGoalService = {
   /**
    * Crear una nueva meta de ahorro
+   * Para metas 'custom': crea automáticamente una cuenta fantasma
+   * Para metas 'monthly' y 'global': no crea depósitos, se calculan desde ingresos/gastos
    */
   async create(data: {
     name: string
@@ -27,6 +29,7 @@ export const savingsGoalService = {
     limit?: number
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
+    goal_type?: 'monthly' | 'global' | 'custom'
   }): Promise<PaginatedResponse<SavingsGoal>> {
     const response = await api.get<PaginatedResponse<SavingsGoal>>(
       '/savings-goals',
@@ -66,56 +69,53 @@ export const savingsGoalService = {
 
   /**
    * Eliminar una meta de ahorro
+   * Para metas custom: también elimina la cuenta fantasma asociada
    */
   async delete(id: string): Promise<void> {
     await api.delete(`/savings-goals/${id}`)
   },
 
   /**
-   * Establecer una meta como objetivo mensual de ahorro
+   * Obtener metas de ahorro separadas por tipo
+   * Useful para calcular diferentes totales
    */
-  async setAsMonthlyTarget(id: string): Promise<SavingsGoal> {
-    const response = await api.post<SavingsGoal>(
-      `/savings-goals/${id}/set-monthly-target`
+  async getByType(goal_type: 'monthly' | 'global' | 'custom'): Promise<SavingsGoal[]> {
+    const response = await api.get<PaginatedResponse<SavingsGoal>>(
+      '/savings-goals',
+      { params: { goal_type, limit: 100 } }
+    )
+    return response.data.data
+  },
+
+  /**
+   * Transferir dinero desde la cuenta fantasma de una meta custom
+   * Este endpoint debe existir en el backend para permitir transferencias
+   */
+  async transferFromVirtualAccount(
+    goalId: string,
+    amount: number,
+    targetAccountId: string,
+    description?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>(
+      `/savings-goals/${goalId}/transfer-from-virtual`,
+      {
+        amount,
+        target_account_id: targetAccountId,
+        description: description || 'Transfer from custom savings goal'
+      }
     )
     return response.data
   },
 
   /**
-   * Marcar una meta como personalizada (excluida del global)
+   * Actualizar los montos calculados de las metas monthly y global
+   * Calcula automáticamente desde monthly_summaries y yearly_summaries
    */
-  async excludeFromGlobal(id: string): Promise<SavingsGoal> {
-    const response = await api.post<SavingsGoal>(
-      `/savings-goals/${id}/exclude-from-global`
+  async updateCalculated(): Promise<{ message: string; monthly: number; global: number }> {
+    const response = await api.post<{ message: string; monthly: number; global: number }>(
+      '/savings-goals/update-calculated'
     )
     return response.data
-  },
-
-  /**
-   * Marcar una meta para contribuir al acumulado global
-   */
-  async includeInGlobal(id: string): Promise<SavingsGoal> {
-    const response = await api.post<SavingsGoal>(
-      `/savings-goals/${id}/include-in-global`
-    )
-    return response.data
-  },
-
-  /**
-   * Obtener todas las metas personalizadas (excluidas del global)
-   */
-  async getCustomGoals(): Promise<SavingsGoal[]> {
-    const response = await api.get<SavingsGoal[]>('/savings-goals/goals/custom')
-    return response.data
-  },
-
-  /**
-   * Obtener todas las metas que contribuyen al global
-   */
-  async getGlobalContributors(): Promise<SavingsGoal[]> {
-    const response = await api.get<SavingsGoal[]>(
-      '/savings-goals/goals/global-contributors'
-    )
-    return response.data
-  },
+  }
 }

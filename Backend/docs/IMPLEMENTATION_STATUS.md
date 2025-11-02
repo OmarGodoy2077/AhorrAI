@@ -69,20 +69,27 @@ Se ha completado exitosamente:
 ✅ **Tabla `financial_settings` - Modificada**
 - ✅ Agregado: `monthly_savings_target` (objetivo de ahorro mensual)
 
-✅ **Tabla `savings_deposits` - NUEVA**
+✅ **Tabla `savings_deposits` - NUEVA (v2.2+ - Mejorada con source_account_id)**
 - ✅ Creada con campos: id, goal_id, user_id, amount, deposit_date, description, created_at, updated_at
+- ✅ **NUEVA (v2.2)**: `source_account_id` (UUID FK a tabla accounts) - Requiere especificar de qué cuenta real transferir
+- ✅ **NUEVA (v2.2)**: Trigger `transfer_funds_on_deposit()` - Automáticamente deduce dinero de cuenta origen
 - ✅ RLS habilitado con 4 políticas (view, insert, update, delete)
-- ✅ Índices de performance: goal_id, user_id, deposit_date
+- ✅ Índices de performance: goal_id, user_id, deposit_date, source_account_id
 
-✅ **Funciones y Triggers (v2.1 - MODIFICADAS)**
+✅ **Funciones y Triggers (v2.1 - MODIFICADAS; v2.2 - NUEVAS PARA DEPÓSITOS)**
 - ✅ Función: `update_savings_from_deposits()` - **ACTUALIZADA v2.1** para EXCLUIR metas personalizadas
   - Antes: Sumaba todos los depósitos de TODAS las metas
   - Ahora: Solo suma depósitos donde `is_custom_excluded_from_global = FALSE`
 - ✅ Función: `update_savings_from_deposits_delete()` - **ACTUALIZADA v2.1** con mismo filtro
+- ✅ **NUEVA (v2.2)**: Función `transfer_funds_on_deposit()` - Transfiere dinero de cuenta origen a cuenta virtual
+  - Deduce el monto del balance de la `source_account`
+  - Suma el monto al balance de la `virtual_account` (meta)
+  - Registra la transacción automáticamente
+- ✅ **NUEVA (v2.2)**: Trigger `trigger_transfer_funds_on_deposit` - Ejecuta la transferencia en INSERT
 - ✅ Triggers: INSERT, UPDATE, DELETE en `savings_deposits`
 - ✅ Modificada: `update_summaries()` - Removida lógica automática de ahorro
 
-✅ **Migraciones Registradas (9 en total)**
+✅ **Migraciones Registradas (10 en total)**
 1. `001_refactor_savings_system_part1_alter_tables` - Modificar tablas existentes
 2. `001_refactor_savings_system_part2_create_deposits_table` - Crear tabla y RLS
 3. `001_refactor_savings_system_part3_create_functions` - Crear funciones
@@ -91,6 +98,7 @@ Se ha completado exitosamente:
 6. `002_separate_custom_goals_from_global` (v2.1) - Agregar columna y actualizar lógica
 7. `002_update_savings_functions_part1 y part2` (v2.1) - Actualizar funciones para excluir metas personalizadas
 8. `003_remove_salary_savings_from_profiles` (v2.1+) - **NUEVA** - Remover columnas redundantes del perfil
+9. `019_add_source_account_to_deposits` (v2.2) - **NUEVA** - Agregar source_account_id a savings_deposits, crear función y trigger para transferencias automáticas
 
 ---
 
@@ -98,7 +106,11 @@ Se ha completado exitosamente:
 
 ✅ **Nuevos Archivos**
 - ✅ `src/models/savingsDeposit.js` - Modelo CRUD para depósitos
-- ✅ `src/controllers/savingsDepositController.js` - Controlador con validación
+- ✅ `src/controllers/savingsDepositController.js` - Controlador con validación y transferencia automática
+  - **ACTUALIZADO (v2.2)**: Nuevo validador de `source_account_id`
+  - **ACTUALIZADO (v2.2)**: Validación de saldo suficiente en cuenta origen
+  - **ACTUALIZADO (v2.2)**: Lógica de transferencia automática (incluida en trigger)
+  - Retorna error "Insufficient balance in source account" si el saldo es insuficiente
 - ✅ `src/routes/savingsDeposit.js` - Rutas para depósitos
 
 ✅ **Archivos Actualizados en v2.1+**
@@ -190,18 +202,19 @@ POST /api/savings-goals/:id/set-monthly-target     - Establecer meta mensual
 ✅ **Tablas Verificadas**
 - `savings_goals`: 16 columnas (incluyendo `is_custom_excluded_from_global`)
 - `financial_settings`: 8 columnas
-- `savings_deposits`: 8 columnas
+- `savings_deposits`: 9 columnas (**ACTUALIZADO v2.2** - incluye `source_account_id` con FK a accounts)
 
 ✅ **Triggers Verificados**
 ```
 ✓ trigger_update_savings_on_deposit_insert (v2.1 - actualizado)
 ✓ trigger_update_savings_on_deposit_update (v2.1 - actualizado)
 ✓ trigger_update_savings_on_deposit_delete (v2.1 - actualizado)
+✓ trigger_transfer_funds_on_deposit (NEW v2.2 - transfiere dinero de source account a virtual)
 ✓ update_savings_deposits_updated_at
 ✓ update_savings_goals_updated_at
 ```
 
-✅ **Índices Verificados v2.1**
+✅ **Índices Verificados v2.1-v2.2**
 ```
 ✓ idx_savings_goals_monthly_target (unique, partial)
 ✓ idx_savings_goals_user_id
@@ -209,6 +222,7 @@ POST /api/savings-goals/:id/set-monthly-target     - Establecer meta mensual
 ✓ idx_savings_deposits_goal_id
 ✓ idx_savings_deposits_user_id
 ✓ idx_savings_deposits_deposit_date
+✓ idx_savings_deposits_source_account_id (NEW v2.2)
 ```
 
 ✅ **RLS Policies Verificadas (4 para savings_deposits)**
@@ -223,6 +237,7 @@ POST /api/savings-goals/:id/set-monthly-target     - Establecer meta mensual
 ```
 ✓ update_savings_from_deposits()
 ✓ update_savings_from_deposits_delete()
+✓ transfer_funds_on_deposit() (NEW v2.2 - maneja la transferencia de dinero)
 ✓ update_summaries() (modificada)
 ```
 
@@ -391,10 +406,10 @@ POST /api/savings-goals
 **Schema:**
 - `Backend/database/schema.sql` (Actualizado v2.1+ - removidas columnas redundantes)
 
-**Backend Code (Actualizado v2.1+):**
+**Backend Code (Actualizado v2.1+; v2.2+ mejorado con source_account_id):**
 - `Backend/src/controllers/authController.js` (registro simplificado - removidos salary/savingsGoal)
-- `Backend/src/models/savingsDeposit.js` (NUEVO v2.1)
-- `Backend/src/controllers/savingsDepositController.js` (NUEVO v2.1)
+- `Backend/src/models/savingsDeposit.js` (NUEVO v2.1; **ACTUALIZADO v2.2** - incluye validación de source_account)
+- `Backend/src/controllers/savingsDepositController.js` (NUEVO v2.1; **ACTUALIZADO v2.2** - maneja transferencias automáticas con source_account_id)
 - `Backend/src/routes/savingsDeposit.js` (NUEVO v2.1)
 - `Backend/src/models/savingsGoal.js` (Actualizado v2.1)
 - `Backend/src/controllers/savingsGoalController.js` (Actualizado v2.1)

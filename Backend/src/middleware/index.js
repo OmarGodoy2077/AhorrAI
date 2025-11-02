@@ -9,6 +9,7 @@ module.exports = {
     validateAccount: require('./validation').validateAccount,
     validateCategory: require('./validation').validateCategory,
     validateFinancialSetting: require('./validation').validateFinancialSetting,
+    validateFinancialSettingUpdate: require('./validation').validateFinancialSettingUpdate,
     validateLoan: require('./validation').validateLoan,
     validateSpendingLimit: require('./validation').validateSpendingLimit,
     logger: require('./logging'),

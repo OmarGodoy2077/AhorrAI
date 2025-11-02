@@ -81,7 +81,13 @@ const validateCategory = [
 ];
 
 const validateFinancialSetting = [
-    body('salary').isFloat({ gt: 0 }).withMessage('Salary must be greater than 0'),
+    body('start_date').optional().isISO8601().withMessage('Invalid start date'),
+    body('end_date').optional().isISO8601().withMessage('Invalid end date'),
+    handleValidationErrors
+];
+
+const validateFinancialSettingUpdate = [
+    body('default_currency_id').optional().isUUID().withMessage('Invalid currency ID'),
     body('start_date').optional().isISO8601().withMessage('Invalid start date'),
     body('end_date').optional().isISO8601().withMessage('Invalid end date'),
     handleValidationErrors
@@ -115,6 +121,7 @@ module.exports = {
     validateAccount,
     validateCategory,
     validateFinancialSetting,
+    validateFinancialSettingUpdate,
     validateLoan,
     validateSpendingLimit
 };

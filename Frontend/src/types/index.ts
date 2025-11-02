@@ -34,8 +34,6 @@ export interface RegisterData {
 export interface FinancialSetting {
   id: string
   user_id: string
-  salary: number
-  monthly_savings_target?: number
   default_currency_id?: string
   effective_date: string
   is_current: boolean
@@ -178,6 +176,7 @@ export interface Account {
     symbol: string
   }
   description?: string
+  is_virtual_account?: boolean
   created_at: string
   updated_at: string
 }
@@ -208,6 +207,7 @@ export interface SavingsGoal {
   status: GoalStatus
   is_monthly_target: boolean
   is_custom_excluded_from_global: boolean
+  virtual_account_id?: string  // For custom goals: reference to phantom account
   target_date?: string
   description?: string
   created_at: string
@@ -221,7 +221,9 @@ export interface SavingsGoal {
 export interface SavingsDeposit {
   id: string
   user_id: string
-  goal_id: string
+  goal_id?: string
+  virtual_account_id?: string
+  source_account_id?: string
   amount: number
   deposit_date: string
   description?: string

@@ -49,8 +49,6 @@ CREATE TRIGGER on_auth_user_created
 CREATE TABLE financial_settings (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    salary DECIMAL(10,2) CHECK (salary >= 0),
-    monthly_savings_target DECIMAL(10,2) CHECK (monthly_savings_target >= 0),
     default_currency_id UUID REFERENCES currencies(id),
     start_date DATE DEFAULT CURRENT_DATE,
     end_date DATE,
@@ -113,6 +111,7 @@ CREATE TABLE accounts (
     type TEXT CHECK (type IN ('cash', 'bank', 'platform')),
     balance DECIMAL(10,2) DEFAULT 0 CHECK (balance >= 0),
     currency_id UUID REFERENCES currencies(id) DEFAULT NULL,
+    is_virtual_account BOOLEAN DEFAULT FALSE,
     description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -215,6 +214,7 @@ CREATE TABLE savings_goals (
     is_custom_excluded_from_global BOOLEAN DEFAULT FALSE,
     status TEXT CHECK (status IN ('active', 'completed', 'paused')),
     is_primary BOOLEAN DEFAULT FALSE,
+    virtual_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -222,7 +222,9 @@ CREATE TABLE savings_goals (
 -- Savings deposits table for tracking manual deposits
 CREATE TABLE savings_deposits (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    goal_id UUID NOT NULL REFERENCES savings_goals(id) ON DELETE CASCADE,
+    goal_id UUID REFERENCES savings_goals(id) ON DELETE CASCADE,
+    virtual_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+    source_account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     amount DECIMAL(10,2) NOT NULL CHECK (amount > 0),
     deposit_date DATE DEFAULT CURRENT_DATE,
@@ -242,6 +244,141 @@ BEGIN
     RETURN NEW;
 END;
 $$ language 'plpgsql';
+
+-- Function to create a virtual account for a savings goal
+-- Called when a custom savings goal is created
+-- Updated: 2025-10-31 - Added default currency handling
+CREATE OR REPLACE FUNCTION create_virtual_account_for_goal(
+    p_goal_id UUID,
+    p_user_id UUID,
+    p_goal_name TEXT,
+    p_currency_id UUID
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_account_id UUID;
+    v_existing_account_id UUID;
+BEGIN
+    -- Check if the goal already has a virtual account
+    SELECT virtual_account_id INTO v_existing_account_id
+    FROM savings_goals
+    WHERE id = p_goal_id;
+    
+    IF v_existing_account_id IS NOT NULL THEN
+        -- Account already exists, return it
+        RETURN v_existing_account_id;
+    END IF;
+    
+    -- Get default currency if not provided
+    IF p_currency_id IS NULL THEN
+        SELECT id INTO p_currency_id FROM currencies WHERE code = 'USD' LIMIT 1;
+    END IF;
+    
+    -- Create a virtual account for the goal
+    INSERT INTO accounts (user_id, name, type, balance, currency_id, is_virtual_account, description)
+    VALUES (
+        p_user_id,
+        'Virtual: ' || p_goal_name,
+        'platform',
+        0,
+        p_currency_id,
+        TRUE,
+        'Virtual account for savings goal: ' || p_goal_name
+    )
+    RETURNING id INTO v_account_id;
+    
+    -- Update the savings goal with the virtual account reference
+    UPDATE savings_goals
+    SET virtual_account_id = v_account_id,
+        updated_at = NOW()
+    WHERE id = p_goal_id;
+    
+    RETURN v_account_id;
+END;
+$$;
+
+-- Function to automatically create virtual account when custom goal is created
+-- Added: 2025-10-31
+CREATE OR REPLACE FUNCTION auto_create_virtual_account_for_custom_goal()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_account_id UUID;
+    v_currency_id UUID;
+BEGIN
+    -- Only create virtual account for custom goals
+    IF NEW.goal_type = 'custom' AND NEW.virtual_account_id IS NULL THEN
+        -- Get the user's default currency
+        SELECT default_currency_id INTO v_currency_id
+        FROM financial_settings
+        WHERE user_id = NEW.user_id
+        AND end_date IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1;
+        
+        -- Fallback to USD if no default currency found
+        IF v_currency_id IS NULL THEN
+            SELECT id INTO v_currency_id FROM currencies WHERE code = 'USD' LIMIT 1;
+        END IF;
+        
+        -- Create virtual account
+        INSERT INTO accounts (user_id, name, type, balance, currency_id, is_virtual_account, description)
+        VALUES (
+            NEW.user_id,
+            'Virtual: ' || NEW.name,
+            'platform',
+            0,
+            v_currency_id,
+            TRUE,
+            'Virtual account for savings goal: ' || NEW.name
+        )
+        RETURNING id INTO v_account_id;
+        
+        -- Update the NEW record with virtual_account_id
+        NEW.virtual_account_id := v_account_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+-- Function to validate deposits to goals have virtual accounts
+-- Added: 2025-10-31
+CREATE OR REPLACE FUNCTION validate_deposit_has_virtual_account()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    goal_virtual_account UUID;
+BEGIN
+    -- If depositing to a goal, ensure it has a virtual account
+    IF NEW.goal_id IS NOT NULL THEN
+        SELECT virtual_account_id INTO goal_virtual_account
+        FROM savings_goals
+        WHERE id = NEW.goal_id;
+        
+        IF goal_virtual_account IS NULL THEN
+            RAISE EXCEPTION 'La meta no tiene cuenta virtual asociada. Por favor contacte al administrador.';
+        END IF;
+        
+        -- Automatically set the virtual_account_id if not provided
+        IF NEW.virtual_account_id IS NULL THEN
+            NEW.virtual_account_id := goal_virtual_account;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
 
 -- Function to handle new user creation (auto-create profile)
 -- Updated: 2025-10-28 - Removed salary and savings_goal fields
@@ -278,6 +415,74 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Function to handle deposit transfers (deduct from source, add to virtual, update goal)
+-- Updated: 2025-10-31 - Added balance validation
+CREATE OR REPLACE FUNCTION transfer_funds_on_deposit()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    source_balance DECIMAL(10,2);
+BEGIN
+    -- Step 1: Deduct from source account if provided
+    IF NEW.source_account_id IS NOT NULL THEN
+        -- Check source account has sufficient balance
+        SELECT balance INTO source_balance
+        FROM accounts
+        WHERE id = NEW.source_account_id;
+        
+        IF source_balance < NEW.amount THEN
+            RAISE EXCEPTION 'Saldo insuficiente en la cuenta de origen';
+        END IF;
+        
+        UPDATE accounts
+        SET balance = balance - NEW.amount,
+            updated_at = NOW()
+        WHERE id = NEW.source_account_id;
+    END IF;
+    
+    -- Step 2: Add to virtual account if provided
+    IF NEW.virtual_account_id IS NOT NULL THEN
+        UPDATE accounts
+        SET balance = balance + NEW.amount,
+            updated_at = NOW()
+        WHERE id = NEW.virtual_account_id;
+    END IF;
+    
+    -- Step 3: Update current_amount in savings_goal if goal_id is provided
+    IF NEW.goal_id IS NOT NULL THEN
+        UPDATE savings_goals
+        SET current_amount = current_amount + NEW.amount,
+            updated_at = NOW()
+        WHERE id = NEW.goal_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to transfer funds from source account to virtual account and update savings goal
+CREATE TRIGGER trigger_transfer_funds_on_deposit
+    AFTER INSERT ON savings_deposits
+    FOR EACH ROW EXECUTE FUNCTION transfer_funds_on_deposit();
+
+-- Trigger to automatically create virtual account for custom goals
+-- Added: 2025-10-31
+DROP TRIGGER IF EXISTS trigger_auto_create_virtual_account ON savings_goals;
+CREATE TRIGGER trigger_auto_create_virtual_account
+    BEFORE INSERT ON savings_goals
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_create_virtual_account_for_custom_goal();
+
+-- Trigger to validate deposits have virtual accounts
+-- Added: 2025-10-31
+DROP TRIGGER IF EXISTS trigger_validate_deposit_virtual_account ON savings_deposits;
+CREATE TRIGGER trigger_validate_deposit_virtual_account
+    BEFORE INSERT ON savings_deposits
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_deposit_has_virtual_account();
 
 -- Triggers for updated_at
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -396,11 +601,14 @@ CREATE POLICY "Users can delete own savings deposits" ON savings_deposits FOR DE
 CREATE POLICY "Anyone can view currencies" ON currencies FOR SELECT TO PUBLIC USING (true);
 
 -- Function to update account balance on income/expense insert/update/delete
+-- Updated: 2025-10-31 - Added balance validation to prevent negative balances
 CREATE OR REPLACE FUNCTION update_account_balance()
 RETURNS TRIGGER 
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    current_balance DECIMAL(10,2);
 BEGIN
     -- For incomes, handle balance changes based on confirmation status
     IF TG_TABLE_NAME = 'income_sources' THEN
@@ -423,11 +631,19 @@ BEGIN
                         updated_at = NOW()
                     WHERE id = NEW.account_id;
                 ELSIF (OLD.is_confirmed = true AND NEW.is_confirmed = false) THEN
-                    -- Just unconfirmed: subtract amount
-                    UPDATE accounts
-                    SET balance = balance - OLD.amount,
-                        updated_at = NOW()
-                    WHERE id = OLD.account_id;
+                    -- Just unconfirmed: subtract amount (with safety check)
+                    SELECT balance INTO current_balance FROM accounts WHERE id = OLD.account_id;
+                    IF current_balance >= OLD.amount THEN
+                        UPDATE accounts
+                        SET balance = balance - OLD.amount,
+                            updated_at = NOW()
+                        WHERE id = OLD.account_id;
+                    ELSE
+                        UPDATE accounts
+                        SET balance = 0,
+                            updated_at = NOW()
+                        WHERE id = OLD.account_id;
+                    END IF;
                 ELSIF (OLD.is_confirmed = true AND NEW.is_confirmed = true AND OLD.amount != NEW.amount) THEN
                     -- Amount changed on confirmed income: adjust difference
                     UPDATE accounts
@@ -438,11 +654,19 @@ BEGIN
             ELSIF NEW.account_id IS NOT NULL AND (OLD.account_id IS NULL OR NEW.account_id != OLD.account_id) THEN
                 -- Account changed or was null
                 IF OLD.account_id IS NOT NULL AND OLD.is_confirmed THEN
-                    -- Subtract from old account
-                    UPDATE accounts
-                    SET balance = balance - OLD.amount,
-                        updated_at = NOW()
-                    WHERE id = OLD.account_id;
+                    -- Subtract from old account (with safety check)
+                    SELECT balance INTO current_balance FROM accounts WHERE id = OLD.account_id;
+                    IF current_balance >= OLD.amount THEN
+                        UPDATE accounts
+                        SET balance = balance - OLD.amount,
+                            updated_at = NOW()
+                        WHERE id = OLD.account_id;
+                    ELSE
+                        UPDATE accounts
+                        SET balance = 0,
+                            updated_at = NOW()
+                        WHERE id = OLD.account_id;
+                    END IF;
                 END IF;
                 IF NEW.is_confirmed THEN
                     -- Add to new account
@@ -452,29 +676,71 @@ BEGIN
                     WHERE id = NEW.account_id;
                 END IF;
             ELSIF OLD.account_id IS NOT NULL AND NEW.account_id IS NULL AND OLD.is_confirmed THEN
-                -- Account removed: subtract from old account
-                UPDATE accounts
-                SET balance = balance - OLD.amount,
-                    updated_at = NOW()
-                WHERE id = OLD.account_id;
+                -- Account removed: subtract from old account (with safety check)
+                SELECT balance INTO current_balance FROM accounts WHERE id = OLD.account_id;
+                IF current_balance >= OLD.amount THEN
+                    UPDATE accounts
+                    SET balance = balance - OLD.amount,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                ELSE
+                    UPDATE accounts
+                    SET balance = 0,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                END IF;
             END IF;
         ELSIF TG_OP = 'DELETE' THEN
-            -- Subtract from balance if was confirmed
+            -- Subtract from balance if was confirmed (with safety check)
             IF OLD.account_id IS NOT NULL AND OLD.is_confirmed THEN
-                UPDATE accounts
-                SET balance = balance - OLD.amount,
-                    updated_at = NOW()
-                WHERE id = OLD.account_id;
+                SELECT balance INTO current_balance FROM accounts WHERE id = OLD.account_id;
+                IF current_balance >= OLD.amount THEN
+                    UPDATE accounts
+                    SET balance = balance - OLD.amount,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                ELSE
+                    UPDATE accounts
+                    SET balance = 0,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                    
+                    RAISE WARNING 'Account % balance was insufficient to subtract income amount %. Balance set to 0.', OLD.account_id, OLD.amount;
+                END IF;
             END IF;
         END IF;
     -- For expenses, subtract from balance
     ELSIF TG_TABLE_NAME = 'expenses' THEN
-        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        IF TG_OP = 'INSERT' THEN
             IF NEW.account_id IS NOT NULL THEN
-                UPDATE accounts
-                SET balance = balance - NEW.amount,
-                    updated_at = NOW()
-                WHERE id = NEW.account_id;
+                SELECT balance INTO current_balance FROM accounts WHERE id = NEW.account_id;
+                IF current_balance >= NEW.amount THEN
+                    UPDATE accounts
+                    SET balance = balance - NEW.amount,
+                        updated_at = NOW()
+                    WHERE id = NEW.account_id;
+                ELSE
+                    RAISE EXCEPTION 'Saldo insuficiente en la cuenta';
+                END IF;
+            END IF;
+        ELSIF TG_OP = 'UPDATE' THEN
+            IF NEW.account_id IS NOT NULL THEN
+                IF OLD.account_id IS NOT NULL THEN
+                    UPDATE accounts
+                    SET balance = balance + OLD.amount,
+                        updated_at = NOW()
+                    WHERE id = OLD.account_id;
+                END IF;
+                
+                SELECT balance INTO current_balance FROM accounts WHERE id = NEW.account_id;
+                IF current_balance >= NEW.amount THEN
+                    UPDATE accounts
+                    SET balance = balance - NEW.amount,
+                        updated_at = NOW()
+                    WHERE id = NEW.account_id;
+                ELSE
+                    RAISE EXCEPTION 'Saldo insuficiente en la cuenta';
+                END IF;
             END IF;
         ELSIF TG_OP = 'DELETE' THEN
             IF OLD.account_id IS NOT NULL THEN
@@ -657,61 +923,53 @@ CREATE INDEX idx_savings_goals_excluded_from_global ON savings_goals(user_id, is
 CREATE INDEX idx_savings_deposits_goal_id ON savings_deposits(goal_id);
 CREATE INDEX idx_savings_deposits_user_id ON savings_deposits(user_id);
 CREATE INDEX idx_savings_deposits_deposit_date ON savings_deposits(deposit_date);
+CREATE INDEX idx_savings_deposits_source_account_id ON savings_deposits(source_account_id);
+CREATE INDEX idx_savings_deposits_virtual_account_id ON savings_deposits(virtual_account_id);
 
 -- ==========================================
 -- SAVINGS DEPOSITS FUNCTIONS AND TRIGGERS
 -- ==========================================
 
--- Function to update savings goals from deposits
--- EXCLUDES custom goals from global accumulation
-CREATE OR REPLACE FUNCTION update_savings_from_deposits()
+-- Function to revert deposit transfers on deletion
+-- Updated: 2025-10-31 - Added GREATEST to prevent negative balances
+CREATE OR REPLACE FUNCTION revert_deposit_transfer()
 RETURNS TRIGGER
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-    user_id_val UUID;
-    global_goal_id UUID;
-    depositing_goal_is_custom BOOLEAN;
 BEGIN
-    user_id_val := NEW.user_id;
-    
-    -- Check if the goal being deposited to is excluded from global
-    SELECT is_custom_excluded_from_global INTO depositing_goal_is_custom
-    FROM savings_goals
-    WHERE id = NEW.goal_id;
-    
-    -- Update the specific goal's current_amount
-    UPDATE savings_goals
-    SET current_amount = (
-        SELECT COALESCE(SUM(amount), 0)
-        FROM savings_deposits
-        WHERE goal_id = NEW.goal_id
-    ),
-    updated_at = NOW()
-    WHERE id = NEW.goal_id;
-    
-    -- Update the global goal's current_amount (sum of ALL deposits EXCEPT custom goals)
-    SELECT id INTO global_goal_id
-    FROM savings_goals
-    WHERE user_id = user_id_val AND goal_type = 'global';
-    
-    IF global_goal_id IS NOT NULL THEN
-        UPDATE savings_goals
-        SET current_amount = (
-            SELECT COALESCE(SUM(sd.amount), 0)
-            FROM savings_deposits sd
-            JOIN savings_goals sg ON sd.goal_id = sg.id
-            WHERE sg.user_id = user_id_val 
-            AND sg.is_custom_excluded_from_global = FALSE
-        ),
-        updated_at = NOW()
-        WHERE id = global_goal_id;
+    -- Step 1: Return funds to source account
+    IF OLD.source_account_id IS NOT NULL THEN
+        UPDATE accounts
+        SET balance = balance + OLD.amount,
+            updated_at = NOW()
+        WHERE id = OLD.source_account_id;
     END IF;
     
-    RETURN NEW;
+    -- Step 2: Deduct from virtual account (prevent negative)
+    IF OLD.virtual_account_id IS NOT NULL THEN
+        UPDATE accounts
+        SET balance = GREATEST(0, balance - OLD.amount),
+            updated_at = NOW()
+        WHERE id = OLD.virtual_account_id;
+    END IF;
+    
+    -- Step 3: Reverse savings_goal current_amount update (prevent negative)
+    IF OLD.goal_id IS NOT NULL THEN
+        UPDATE savings_goals
+        SET current_amount = GREATEST(0, current_amount - OLD.amount),
+            updated_at = NOW()
+        WHERE id = OLD.goal_id;
+    END IF;
+    
+    RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Trigger to revert deposit transfer on DELETE
+CREATE TRIGGER trigger_revert_deposit_transfer
+    BEFORE DELETE ON savings_deposits
+    FOR EACH ROW EXECUTE FUNCTION revert_deposit_transfer();
 
 -- Function to handle delete operations on deposits
 -- EXCLUDES custom goals from global accumulation
@@ -758,18 +1016,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Triggers for deposits
-CREATE TRIGGER trigger_update_savings_on_deposit_insert
-    AFTER INSERT ON savings_deposits
-    FOR EACH ROW EXECUTE FUNCTION update_savings_from_deposits();
-
-CREATE TRIGGER trigger_update_savings_on_deposit_update
-    AFTER UPDATE ON savings_deposits
-    FOR EACH ROW EXECUTE FUNCTION update_savings_from_deposits();
-
-CREATE TRIGGER trigger_update_savings_on_deposit_delete
-    AFTER DELETE ON savings_deposits
-    FOR EACH ROW EXECUTE FUNCTION update_savings_from_deposits_delete();
+-- NOTE: The old triggers below have been removed because they were duplicating
+-- the updates now handled by transfer_funds_on_deposit() and revert_deposit_transfer()
+-- The new trigger_transfer_funds_on_deposit() handles:
+-- 1. Deducting from source account
+-- 2. Adding to virtual account  
+-- 3. Updating savings_goal current_amount
+-- The new trigger_revert_deposit_transfer() handles deletions in reverse
 
 -- ==========================================
 -- ROW LEVEL SECURITY (RLS) POLICIES

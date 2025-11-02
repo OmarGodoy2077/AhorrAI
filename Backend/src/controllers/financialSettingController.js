@@ -3,9 +3,20 @@ const { FinancialSetting } = require('../models');
 const FinancialSettingController = {
     async createSetting(req, res) {
         try {
-            const data = { ...req.body, user_id: req.user.userId };
+            const { effective_date, is_current, ...otherData } = req.body;
+            const data = {
+                ...otherData,
+                user_id: req.user.userId,
+                start_date: effective_date || new Date().toISOString().split('T')[0]
+            };
             const setting = await FinancialSetting.create(data);
-            res.status(201).json(setting);
+            // Map database fields to API response
+            const response = {
+                ...setting,
+                effective_date: setting.start_date,
+                is_current: !setting.end_date
+            };
+            res.status(201).json(response);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -21,7 +32,13 @@ const FinancialSettingController = {
                 sortBy,
                 sortOrder
             });
-            res.json({ data: settings, page: parseInt(page), limit: parseInt(limit) });
+            // Map database fields to API response
+            const mappedSettings = settings.map(setting => ({
+                ...setting,
+                effective_date: setting.start_date,
+                is_current: !setting.end_date
+            }));
+            res.json({ data: mappedSettings, page: parseInt(page), limit: parseInt(limit) });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -33,7 +50,13 @@ const FinancialSettingController = {
             if (!setting) {
                 return res.status(404).json({ error: 'No active financial setting found' });
             }
-            res.json(setting);
+            // Map database fields to API response
+            const response = {
+                ...setting,
+                effective_date: setting.start_date,
+                is_current: !setting.end_date
+            };
+            res.json(response);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -46,8 +69,19 @@ const FinancialSettingController = {
             if (!setting || setting.user_id !== req.user.userId) {
                 return res.status(404).json({ error: 'Setting not found' });
             }
-            const updatedSetting = await FinancialSetting.update(id, req.body);
-            res.json(updatedSetting);
+            const { effective_date, is_current, ...updateData } = req.body;
+            const data = {
+                ...updateData,
+                ...(effective_date && { start_date: effective_date })
+            };
+            const updatedSetting = await FinancialSetting.update(id, data);
+            // Map database fields to API response
+            const response = {
+                ...updatedSetting,
+                effective_date: updatedSetting.start_date,
+                is_current: !updatedSetting.end_date
+            };
+            res.json(response);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

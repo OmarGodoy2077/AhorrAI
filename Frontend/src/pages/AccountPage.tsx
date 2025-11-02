@@ -14,10 +14,12 @@ import {
 } from '@/components/ui/Select'
 import { DataTable } from '@/components/ui/DataTable'
 import { useFormatCurrency } from '@/hooks/useFormatCurrency'
+import { useToast } from '@/components/ui/toast'
 import { Trash2, Edit, Plus } from 'lucide-react'
 
 export const AccountPage = () => {
   const { formatCurrency, defaultCurrency } = useFormatCurrency()
+  const { success, error: showError } = useToast()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [currencies, setCurrencies] = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,8 +46,10 @@ export const AccountPage = () => {
         sortBy: 'created_at',
         sortOrder: 'desc',
       })
-      setAccounts(response.data)
-      setTotal(response.total || 0)
+      // Filter out virtual accounts from the main accounts list
+      const realAccounts = response.data.filter(account => !account.is_virtual_account)
+      setAccounts(realAccounts)
+      setTotal(response.total ? response.total - (response.data.length - realAccounts.length) : 0)
       setPage(pageNum)
     } catch (err) {
       setError(getErrorMessage(err))
@@ -77,13 +81,17 @@ export const AccountPage = () => {
       setError('')
       if (editingId) {
         await accountService.update(editingId, formData)
+        success('Cuenta actualizada', 'La cuenta se actualizó correctamente')
       } else {
         await accountService.create(formData)
+        success('Cuenta creada', 'La nueva cuenta se agregó correctamente')
       }
       resetForm()
       fetchAccounts(1)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error', errorMsg)
     }
   }
 
@@ -92,9 +100,12 @@ export const AccountPage = () => {
     try {
       setError('')
       await accountService.delete(id)
+      success('Cuenta eliminada', 'La cuenta se eliminó correctamente')
       fetchAccounts(1)
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      showError('Error al eliminar', errorMsg)
     }
   }
 
@@ -173,62 +184,62 @@ export const AccountPage = () => {
   ]
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Cuentas</h1>
-        <p className="text-muted-foreground mt-1">
+    <div className="space-y-4 sm:space-y-6 px-3 sm:px-4 lg:px-6 animate-fade-in">
+      <div className="animate-slide-in-down">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">Cuentas</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
           Administra tus cuentas bancarias y efectivo
         </p>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-3 rounded-lg animate-slide-in-down">
           {error}
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3 mb-6">
-        <Card>
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-4 sm:mb-6">
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Cuentas</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Cuentas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{accounts.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{accounts.filter(acc => !acc.is_virtual_account).length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in" style={{ animationDelay: '0.1s' }}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Balance Total</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Balance Disponible</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(accounts.reduce((sum, acc) => sum + acc.balance, 0))}
+            <div className="text-lg sm:text-2xl font-bold truncate">
+              {formatCurrency(accounts.filter(acc => !acc.is_virtual_account).reduce((sum, acc) => sum + acc.balance, 0))}
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-scale-in sm:col-span-2 lg:col-span-1" style={{ animationDelay: '0.2s' }}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Últimas Operaciones</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Cuentas Activas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{accounts.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{accounts.filter(acc => acc.balance > 0).length}</div>
           </CardContent>
         </Card>
       </div>
 
       <Button
         onClick={() => setShowForm(!showForm)}
-        className="w-full sm:w-auto"
+        className="w-full sm:w-auto transition-all duration-300 hover:scale-105"
       >
         <Plus className="h-4 w-4 mr-2" />
         Nueva Cuenta
       </Button>
 
       {showForm && (
-        <Card>
+        <Card className="animate-slide-in-up border-2 border-primary/20">
           <CardHeader>
-            <CardTitle>{editingId ? 'Editar' : 'Nueva'} Cuenta</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-lg sm:text-xl">{editingId ? 'Editar' : 'Nueva'} Cuenta</CardTitle>
+            <CardDescription className="text-sm">
               {editingId ? 'Actualiza los datos de tu cuenta' : 'Agrega una nueva cuenta'}
             </CardDescription>
           </CardHeader>
@@ -247,16 +258,16 @@ export const AccountPage = () => {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="type">Tipo</Label>
+                  <Label htmlFor="type" className="text-sm">Tipo</Label>
                   <Select
                     value={formData.type}
                     onValueChange={(value) =>
                       setFormData({ ...formData, type: value as AccountType })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="transition-all duration-300 focus:scale-105">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -268,14 +279,14 @@ export const AccountPage = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="currency">Moneda</Label>
+                  <Label htmlFor="currency" className="text-sm">Moneda</Label>
                   <Select
                     value={formData.currency_id}
                     onValueChange={(value) =>
                       setFormData({ ...formData, currency_id: value })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="transition-all duration-300 focus:scale-105">
                       <SelectValue placeholder="Seleccionar moneda" />
                     </SelectTrigger>
                     <SelectContent>
@@ -316,11 +327,11 @@ export const AccountPage = () => {
                 />
               </div>
 
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={resetForm}>
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                   Cancelar
                 </Button>
-                <Button type="submit">
+                <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                   {editingId ? 'Actualizar' : 'Crear'} Cuenta
                 </Button>
               </div>
