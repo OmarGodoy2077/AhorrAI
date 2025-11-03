@@ -51,6 +51,24 @@ function getTodayDayOfMonth() {
 }
 
 /**
+ * Get current month in Guatemala timezone
+ * @returns {number} Month (1-12)
+ */
+function getCurrentMonthGuatemala() {
+    const dateStr = getTodayGuatemalaString();
+    return parseInt(dateStr.split('-')[1]);
+}
+
+/**
+ * Get current year in Guatemala timezone
+ * @returns {number} Year (e.g., 2025)
+ */
+function getCurrentYearGuatemala() {
+    const dateStr = getTodayGuatemalaString();
+    return parseInt(dateStr.split('-')[0]);
+}
+
+/**
  * Convert a date string to Guatemala timezone comparison
  * @param {string} dateString - Date string in YYYY-MM-DD format
  * @returns {Date} Comparable Date object
@@ -84,6 +102,8 @@ module.exports = {
     getTodayGuatemalaString,
     getNowGuatemala,
     getTodayDayOfMonth,
+    getCurrentMonthGuatemala,
+    getCurrentYearGuatemala,
     parseGuatemalaDate,
     isDateTodayOrPast,
     isDateFuture

@@ -154,37 +154,37 @@ export const CategoryPage = () => {
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Categorías de Gastos</h1>
-          <p className="text-muted-foreground">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 animate-slide-in-down">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold truncate">Categorías de Gastos</h1>
+          <p className="text-xs sm:text-base text-muted-foreground mt-1 truncate">
             Gestiona las categorías para organizar tus gastos
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
+        <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto flex items-center gap-2 transition-all duration-300 hover:scale-105">
           <Plus className="h-4 w-4" />
           Nueva Categoría
         </Button>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-3 rounded-lg animate-slide-in-down">
           {error}
         </div>
       )}
 
       {/* Form Modal */}
       {showForm && (
-        <Card>
+        <Card className="animate-slide-in-up border-2 border-primary/20">
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="text-lg sm:text-xl">
               {editingId ? 'Editar Categoría' : 'Nueva Categoría'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="name">Nombre</Label>
                   <Input
@@ -222,15 +222,16 @@ export const CategoryPage = () => {
                 />
               </div>
 
-              <div className="flex gap-2 pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 pt-4 sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={resetForm}
+                  className="w-full sm:w-auto transition-all duration-300 hover:scale-105"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit">
+                <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                   {editingId ? 'Actualizar' : 'Crear'} Categoría
                 </Button>
               </div>

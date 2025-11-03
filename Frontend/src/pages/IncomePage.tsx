@@ -352,16 +352,16 @@ export const IncomePage = () => {
 
     if (useCustomDateRange && filterStartDate && filterEndDate) {
       filtered = filtered.filter(i => {
-        const incomeDate = new Date(i.income_date)
-        const start = new Date(filterStartDate)
-        const end = new Date(filterEndDate)
+        const incomeDate = parseISODate(i.income_date)
+        const start = parseISODate(filterStartDate)
+        const end = parseISODate(filterEndDate)
         return incomeDate >= start && incomeDate <= end
       })
     } else {
       // Filter by month/year
       filtered = filtered.filter(i => {
         if (!i.income_date) return false
-        const incomeDate = new Date(i.income_date)
+        const incomeDate = parseISODate(i.income_date)
         return incomeDate.getMonth() + 1 === filterMonth && incomeDate.getFullYear() === filterYear
       })
     }
@@ -897,9 +897,9 @@ export const IncomePage = () => {
                     const averageSalaries = salaries.filter(s => s.type === 'average');
                     const totalTargetAverage = averageSalaries.reduce((sum, salary) => sum + (salary.amount || 0), 0);
                     const currentMonthIncomes = allIncomes.filter(income => {
-                      const incomeDate = new Date(income.income_date);
-                      const now = new Date();
-                      return incomeDate.getMonth() === now.getMonth() && incomeDate.getFullYear() === now.getFullYear();
+                      const incomeDate = parseISODate(income.income_date);
+                      const now = parseISODate(getTodayGuatemalaDate());
+                      return incomeDate.getMonth() + 1 === now.getMonth() + 1 && incomeDate.getFullYear() === now.getFullYear();
                     });
                     const currentMonthTotal = currentMonthIncomes.reduce((sum, income) => sum + (income.amount || 0), 0);
                     const remaining = totalTargetAverage - currentMonthTotal;

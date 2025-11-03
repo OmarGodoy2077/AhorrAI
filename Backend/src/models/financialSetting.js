@@ -20,13 +20,16 @@ const FinancialSetting = {
         const { limit = 10, offset = 0, sortBy = 'created_at', sortOrder = 'desc' } = options;
         let query = database
             .from('financial_settings')
-            .select('*')
+            .select(`
+                *,
+                currencies (code, name, symbol)
+            `)
             .eq('user_id', userId)
             .order(sortBy, { ascending: sortOrder === 'asc' })
             .range(offset, offset + limit - 1);
         const { data: settings, error } = await query;
         if (error) throw error;
-        return settings;
+        return settings && settings.length > 0 ? settings[0] : null;
     },
 
     async findCurrentByUserId(userId) {

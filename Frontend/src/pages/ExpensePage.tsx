@@ -167,6 +167,9 @@ const ExpensePage = () => {
     setShowForm(false)
   }
 
+  // Create categoryMap first - it's needed by getFilteredExpenses
+  const categoryMap = categories.reduce((map, cat) => { map[cat.id] = cat; return map; }, {} as Record<string, Category>)
+
   const getFilteredExpenses = () => {
     let filtered = expenses
 
@@ -216,7 +219,6 @@ const ExpensePage = () => {
 
   const filteredExpenses = getFilteredExpenses()
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
-  const categoryMap = categories.reduce((map, cat) => { map[cat.id] = cat; return map; }, {} as Record<string, Category>)
   const necessaryTotal = expenses.filter(e => {
     const cat = e.category || categoryMap[e.category_id!]
     return cat?.type === 'necessary'
@@ -438,9 +440,9 @@ const ExpensePage = () => {
       </div>
 
       {showForm && (
-        <Card>
+        <Card className="animate-slide-in-up border-2 border-primary/20">
           <CardHeader>
-            <CardTitle>{editingId ? 'Editar' : 'Nuevo'} Gasto</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">{editingId ? 'Editar' : 'Nuevo'} Gasto</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -540,11 +542,11 @@ const ExpensePage = () => {
                 </div>
               </div>
 
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={resetForm}>
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
                   Cancelar
                 </Button>
-                <Button type="submit">{editingId ? 'Actualizar' : 'Crear'} Gasto</Button>
+                <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">{editingId ? 'Actualizar' : 'Crear'} Gasto</Button>
               </div>
             </form>
           </CardContent>

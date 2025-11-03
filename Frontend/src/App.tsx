@@ -19,6 +19,7 @@ import { CategoryPage } from '@/pages/CategoryPage'
 import { SavingsPage } from '@/pages/SavingsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { AccountStatementPage } from '@/pages/AccountStatementPage'
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
                     <Route path="/categories" element={<CategoryPage />} />
                     <Route path="/savings" element={<SavingsPage />} />
                     <Route path="/accounts" element={<AccountPage />} />
+                    <Route path="/account-statement" element={<AccountStatementPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
 

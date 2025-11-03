@@ -4,6 +4,7 @@ import type { Currency } from '@/types';
 import { currencyService } from '@/services';
 import { financialSettingService } from '@/services';
 import { getTodayGuatemalaDate } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface CurrencyContextType {
   defaultCurrency: Currency | null;
@@ -30,6 +31,7 @@ interface CurrencyProviderProps {
 export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) => {
   const [defaultCurrency, setDefaultCurrencyState] = useState<Currency | null>(null);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const { isAuthenticated } = useAuth();
 
   const loadCurrencies = async () => {
     try {
@@ -102,10 +104,10 @@ export const CurrencyProvider: React.FC<CurrencyProviderProps> = ({ children }) 
   }, []);
 
   useEffect(() => {
-    if (currencies.length > 0) {
+    if (currencies.length > 0 && isAuthenticated) {
       loadDefaultCurrency();
     }
-  }, [currencies]);
+  }, [currencies, isAuthenticated]);
 
   return (
     <CurrencyContext.Provider

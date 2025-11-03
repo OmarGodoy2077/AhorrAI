@@ -13,7 +13,8 @@ import {
   LogOut,
   Menu,
   X,
-  Tag
+  Tag,
+  FileText
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { name: 'Categorías', path: '/categories', icon: Tag },
   { name: 'Ahorros', path: '/savings', icon: PiggyBank },
   { name: 'Cuentas', path: '/accounts', icon: CreditCard },
+  { name: 'Estado de Cuenta', path: '/account-statement', icon: FileText },
   { name: 'Configuración', path: '/settings', icon: Settings },
 ]
 

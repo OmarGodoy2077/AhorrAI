@@ -15,6 +15,7 @@ const savingsDepositRoutes = require('./savingsDeposit');
 const spendingLimitRoutes = require('./spendingLimit');
 const systemRoutes = require('./system');
 const chatContextRoutes = require('./chatContext');
+const accountStatementRoutes = require('./accountStatements');
 
 const router = express.Router();
 
@@ -34,5 +35,6 @@ router.use('/system', systemRoutes);
 router.use('/savings-deposits', savingsDepositRoutes);
 router.use('/spending-limits', spendingLimitRoutes);
 router.use('/chat-context', chatContextRoutes);
+router.use('/account-statements', accountStatementRoutes);
 
 module.exports = router;

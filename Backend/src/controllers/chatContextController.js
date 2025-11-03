@@ -1,4 +1,9 @@
-const { Income, Expense, Account, SavingsGoal, MonthlySummary } = require('../models');
+const { Income, Expense, Account, SavingsGoal, MonthlySummary, FinancialSetting } = require('../models');
+const { 
+    getCurrentMonthGuatemala, 
+    getCurrentYearGuatemala,
+    parseGuatemalaDate 
+} = require('../utils/dateUtils');
 
 /**
  * Función para generar contexto financiero completo
@@ -6,40 +11,68 @@ const { Income, Expense, Account, SavingsGoal, MonthlySummary } = require('../mo
  */
 async function generateFinancialContext(userId) {
     try {
-        const currentDate = new Date();
-        const currentMonth = currentDate.getMonth() + 1;
-        const currentYear = currentDate.getFullYear();
+        // Get current month/year in Guatemala timezone directly from formatted string
+        const currentMonth = getCurrentMonthGuatemala();
+        const currentYear = getCurrentYearGuatemala();
+
+        console.log(`[Chat Context] Processing user ${userId} for month ${currentMonth}/${currentYear}`);
+
+        // Get user's currency preference
+        let currencySymbol = '$'; // default
+        try {
+            const userSettings = await FinancialSetting.findByUserId(userId);
+            if (userSettings && userSettings.currencies) {
+                currencySymbol = userSettings.currencies.symbol || '$';
+                console.log(`[Chat Context] Using currency symbol: ${currencySymbol}`);
+            }
+        } catch (err) {
+            console.warn('[Chat Context] Could not get user currency, using default $');
+        }
 
         // 1. Obtener ingresos del mes actual (confirmados)
-        const incomesResult = await Income.findByUserId(userId);
+        const incomesResult = await Income.findByUserId(userId, { limit: 1000, offset: 0 });
         const incomes = incomesResult.data || [];
+        console.log(`[Chat Context] Total incomes fetched: ${incomes.length}`);
+        
         const currentMonthIncomes = incomes.filter(income => {
-            const incomeDate = new Date(income.income_date);
-            return (
-                incomeDate.getMonth() + 1 === currentMonth &&
-                incomeDate.getFullYear() === currentYear &&
-                income.is_confirmed === true
-            );
+            // Parse ISO date string correctly (YYYY-MM-DD)
+            const [year, month, day] = income.income_date.split('-').map(Number);
+            const matches = month === currentMonth && year === currentYear && income.is_confirmed === true;
+            if (matches) {
+                console.log(`[Chat Context] Matching income: ${income.name} (${income.income_date}) - ${income.amount}`);
+            }
+            return matches;
         });
+        console.log(`[Chat Context] Current month incomes: ${currentMonthIncomes.length}`);
+        
         const totalMonthlyIncome = currentMonthIncomes.reduce(
             (sum, income) => sum + parseFloat(income.amount || 0),
             0
         );
+        console.log(`[Chat Context] Total monthly income calculated: ${totalMonthlyIncome}`);
 
         // 2. Obtener gastos del mes actual
-        const expenses = await Expense.findByUserId(userId);
+        const expenses = await Expense.findByUserId(userId, { limit: 1000, offset: 0 });
         const expensesArray = Array.isArray(expenses) ? expenses : (expenses.data || []);
+        console.log(`[Chat Context] Total expenses fetched: ${expensesArray.length}`);
+        
         const currentMonthExpenses = expensesArray.filter(expense => {
-            const expenseDate = new Date(expense.expense_date || expense.date);
-            return (
-                expenseDate.getMonth() + 1 === currentMonth &&
-                expenseDate.getFullYear() === currentYear
-            );
+            // Parse ISO date string correctly
+            const dateField = expense.expense_date || expense.date;
+            const [year, month, day] = dateField.split('-').map(Number);
+            const matches = month === currentMonth && year === currentYear;
+            if (matches) {
+                console.log(`[Chat Context] Matching expense: ${expense.description} (${dateField}) - ${expense.amount}`);
+            }
+            return matches;
         });
+        console.log(`[Chat Context] Current month expenses: ${currentMonthExpenses.length}`);
+        
         const totalMonthlyExpenses = currentMonthExpenses.reduce(
             (sum, expense) => sum + parseFloat(expense.amount || 0),
             0
         );
+        console.log(`[Chat Context] Total monthly expenses calculated: ${totalMonthlyExpenses}`);
 
         // Separar gastos necesarios vs innecesarios
         const necessaryExpenses = currentMonthExpenses.filter(
@@ -66,16 +99,19 @@ async function generateFinancialContext(userId) {
         );
 
         // 3. Obtener balance total de cuentas (excluyendo cuentas virtuales)
-        const accountsResult = await Account.findByUserId(userId);
+        const accountsResult = await Account.findByUserId(userId, { limit: 1000, offset: 0 });
         const accounts = accountsResult.data || accountsResult || [];
+        console.log(`[Chat Context] Total accounts fetched: ${accounts.length}`);
         const realAccounts = accounts.filter(account => !account.is_virtual_account);
+        console.log(`[Chat Context] Real (non-virtual) accounts: ${realAccounts.length}`);
         const totalBalance = realAccounts.reduce(
-            (sum, account) => sum + parseFloat(account.current_balance || 0),
+            (sum, account) => sum + parseFloat(account.balance || 0),
             0
         );
+        console.log(`[Chat Context] Total balance: ${totalBalance}`);
 
         // 4. Obtener información de metas de ahorro
-        const savingsGoalsResult = await SavingsGoal.findByUserId(userId);
+        const savingsGoalsResult = await SavingsGoal.findByUserId(userId, { limit: 1000, offset: 0 });
         const savingsGoals = savingsGoalsResult.data || savingsGoalsResult || [];
         
         // Meta mensual
@@ -203,27 +239,27 @@ async function generateFinancialContext(userId) {
 CONTEXTO FINANCIERO DEL USUARIO:
 
 SITUACION ACTUAL (${currentMonth}/${currentYear}):
-- Ingresos del mes: $${totalMonthlyIncome.toFixed(2)}
-- Gastos del mes: $${totalMonthlyExpenses.toFixed(2)}
-  * Necesarios: $${totalNecessaryExpenses.toFixed(2)}
-  * Innecesarios: $${totalUnnecessaryExpenses.toFixed(2)}
-- Ahorro neto del mes: $${monthlySavingsActual.toFixed(2)}
-- Balance total disponible: $${totalBalance.toFixed(2)}
+- Ingresos del mes: ${currencySymbol}${totalMonthlyIncome.toFixed(2)}
+- Gastos del mes: ${currencySymbol}${totalMonthlyExpenses.toFixed(2)}
+  * Necesarios: ${currencySymbol}${totalNecessaryExpenses.toFixed(2)}
+  * Innecesarios: ${currencySymbol}${totalUnnecessaryExpenses.toFixed(2)}
+- Ahorro neto del mes: ${currencySymbol}${monthlySavingsActual.toFixed(2)}
+- Balance total disponible: ${currencySymbol}${totalBalance.toFixed(2)}
 
 CAPACIDAD DE AHORRO:
 - Tasa de ahorro mensual: ${context.current_month.savings_rate}%
-- Meta de ahorro mensual: $${monthlySavingsTarget.toFixed(2)} (${monthlySavingsProgress}% completado)
+- Meta de ahorro mensual: ${currencySymbol}${monthlySavingsTarget.toFixed(2)} (${monthlySavingsProgress}% completado)
 - Fondo de emergencia: ${context.financial_health.emergency_fund_months} meses de gastos
 
 HISTORIAL (ultimos ${summaries.length} meses):
-- Ingreso promedio: $${avgMonthlyIncome.toFixed(2)}
-- Gasto promedio: $${avgMonthlyExpenses.toFixed(2)}
-- Ahorro promedio: $${(avgMonthlyIncome - avgMonthlyExpenses).toFixed(2)}
+- Ingreso promedio: ${currencySymbol}${avgMonthlyIncome.toFixed(2)}
+- Gasto promedio: ${currencySymbol}${avgMonthlyExpenses.toFixed(2)}
+- Ahorro promedio: ${currencySymbol}${(avgMonthlyIncome - avgMonthlyExpenses).toFixed(2)}
 
 METAS DE AHORRO:
 ${monthlyGoal ? `- Meta Mensual: ${monthlySavingsProgress}% (${monthlySavingsActual >= monthlySavingsTarget ? 'Lograda' : 'En progreso'})` : '- Meta Mensual: No configurada'}
-${globalGoal ? `- Meta Global: ${globalSavingsProgress}% de $${globalSavingsTarget.toFixed(2)}` : ''}
-${customGoalsData.length > 0 ? customGoalsData.map(g => `- ${g.name}: ${g.progress}% de $${g.target.toFixed(2)}`).join('\n') : ''}
+${globalGoal ? `- Meta Global: ${globalSavingsProgress}% de ${currencySymbol}${globalSavingsTarget.toFixed(2)}` : ''}
+${customGoalsData.length > 0 ? customGoalsData.map(g => `- ${g.name}: ${g.progress}% de ${currencySymbol}${g.target.toFixed(2)}`).join('\n') : ''}
 
 SALUD FINANCIERA:
 - Ratio gastos/ingresos: ${context.financial_health.expense_to_income_ratio}%
