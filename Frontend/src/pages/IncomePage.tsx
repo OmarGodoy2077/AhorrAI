@@ -500,6 +500,18 @@ export const IncomePage = () => {
       ),
     },
     {
+      header: 'Fecha',
+      render: (item: Income) => (
+        <span className="text-sm text-muted-foreground">
+          {item.income_date ? parseISODate(item.income_date).toLocaleDateString('es-GT', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          }) : 'N/A'}
+        </span>
+      ),
+    },
+    {
       header: 'Estado',
       render: (item: Income) => {
         if (item.is_confirmed) {
@@ -896,11 +908,20 @@ export const IncomePage = () => {
                   {(() => {
                     const averageSalaries = salaries.filter(s => s.type === 'average');
                     const totalTargetAverage = averageSalaries.reduce((sum, salary) => sum + (salary.amount || 0), 0);
+                    
+                    // Solo sumar ingresos extra (excluir salarios fijos generados automáticamente)
                     const currentMonthIncomes = allIncomes.filter(income => {
+                      // Filtrar por mes actual
                       const incomeDate = parseISODate(income.income_date);
                       const now = parseISODate(getTodayGuatemalaDate());
-                      return incomeDate.getMonth() + 1 === now.getMonth() + 1 && incomeDate.getFullYear() === now.getFullYear();
+                      const isSameMonth = incomeDate.getMonth() + 1 === now.getMonth() + 1 && incomeDate.getFullYear() === now.getFullYear();
+                      
+                      // Solo incluir ingresos que NO son generados automáticamente desde salary schedules
+                      const isNotGeneratedSalary = !income.description?.includes('Generado desde:');
+                      
+                      return isSameMonth && isNotGeneratedSalary;
                     });
+                    
                     const currentMonthTotal = currentMonthIncomes.reduce((sum, income) => sum + (income.amount || 0), 0);
                     const remaining = totalTargetAverage - currentMonthTotal;
                     const progress = (currentMonthTotal / totalTargetAverage) * 100;
@@ -912,7 +933,7 @@ export const IncomePage = () => {
                           <span className="font-medium">{formatCurrency(totalTargetAverage)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Ingresos del Mes:</span>
+                          <span className="text-sm text-muted-foreground">Ingresos Extra del Mes:</span>
                           <span className="font-medium">{formatCurrency(currentMonthTotal)}</span>
                         </div>
                         <div className="flex items-center justify-between">

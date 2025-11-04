@@ -77,6 +77,7 @@ AhorraAI es una aplicación de finanzas personales diseñada específicamente pa
 - `/categories` → CategoryPage
 - `/savings` → SavingsPage
 - `/accounts` → AccountPage
+- `/account-statement` → AccountStatementPage
 - `/settings` → SettingsPage
 
 ### Sistema de Protección
@@ -602,6 +603,58 @@ La página tiene tres pestañas principales para organizar las metas:
 - Manejo de formulario con validación
 - Paginación de resultados
 - Toggle entre formulario de creación/edición y tabla
+
+### AccountStatementPage
+
+**Ruta**: `/account-statement`
+**Tipo**: Protegida
+
+**Propósito**: Visualización completa del estado de cuenta con historial de transacciones, filtros y resumen financiero detallado.
+
+**Componentes**:
+1. **Filtros Avanzados**:
+   - Selector de Año (últimos 5 años)
+   - Selector de Mes (todos los meses o rango específico)
+   - Selector de Cuenta (todas las cuentas o cuenta específica)
+   - Botón de Aplicar Filtros
+2. **Resumen Financiero** (4 tarjetas):
+   - **Ingresos**: Monto total de ingresos en el periodo
+   - **Egresos**: Monto total de gastos en el periodo
+   - **Cambio Neto**: Diferencia entre ingresos y egresos (puede ser positivo o negativo)
+   - **Balance Final**: Balance total al final del periodo seleccionado
+3. **Tabla de Transacciones**: Lista de todas las transacciones con filtros aplicados
+   - Fecha, Descripción, Cuenta, Ingreso, Egreso, Balance
+4. **Botón de Aplicar Filtros**: Actualiza la vista con los filtros seleccionados
+
+**Formulario de Filtros**:
+- **Año**: Selector numérico para filtrar por año (actual o histórico)
+- **Mes**: Selector de mes o "todos los meses" para filtrar por periodo específico
+- **Cuenta**: Selector para filtrar por cuenta específica o ver todas
+- **Aplicar Filtros**: Botón que actualiza la vista con los parámetros seleccionados
+
+**Flujo Completo**:
+1. **Carga Inicial**: Fetch de estado de cuenta con filtros predeterminados (año actual, todos los meses, todas las cuentas)
+2. **Visualización**: Muestra resumen financiero y tabla de transacciones
+3. **Filtrado**: Usuario selecciona año, mes y/o cuenta específica
+4. **Actualización**: Al hacer clic en "Aplicar Filtros", se refrescan datos y resumen
+5. **Visualización Responsiva**: Tabla se adapta a dispositivos móviles con scroll horizontal
+
+**Interacciones**:
+- `accountStatementService.getStatement()` - para obtener estado de cuenta con filtros
+- `getErrorMessage()` - para manejo de errores de API
+
+**Efectos**:
+- Fetch inicial con filtro por año actual
+- Actualización dinámica del resumen al aplicar filtros
+- Formato monetario según configuración del usuario
+- Mostrar/ocultar loading states durante operaciones
+- Manejo de errores con mensajes amigables
+
+**Diseño Responsive**:
+- Cards de resumen: 2 columnas en mobile, 4 columnas en desktop
+- Tabla de transacciones: Scroll horizontal en mobile
+- Formulario de filtros: Adaptado para mobile con espaciado apropiado
+- Iconos y textos escalables según tamaño de pantalla
 
 ### AccountPage
 
@@ -1565,3 +1618,99 @@ Los cambios realizados en esta actualización fueron:
 6. ✅ Confirmado que triggers SQL funcionan correctamente
 
 **No se requieren cambios en código**, solo se actualizó la documentación para reflejar correctamente cómo funciona el sistema.
+
+---
+
+## 📈 NUEVAS FUNCIONALIDADES ADICIONALES - Noviembre 2025
+
+### 1. Servicio de Préstamos (LoanService)
+
+**Propósito**: Gestión completa de préstamos personales, incluyendo seguimiento de deudas, pagos y estado financiero.
+
+**API Endpoints**:
+- `loanService.create()` - Crear un nuevo préstamo
+- `loanService.getAll()` - Listar todos los préstamos del usuario (con paginación)
+- `loanService.getById()` - Obtener un préstamo específico por ID
+- `loanService.update()` - Actualizar información de préstamo
+- `loanService.delete()` - Eliminar un préstamo
+
+**Campos de Préstamo**:
+- `creditor_name`: Nombre del acreedor o institución
+- `principal_amount`: Monto original del préstamo
+- `remaining_amount`: Balance pendiente
+- `currency`: Moneda del préstamo (GTQ, USD, etc.)
+- `interest_rate`: Porcentaje de interés anual
+- `start_date`: Fecha de inicio del préstamo
+- `due_date`: Fecha de vencimiento (opcional)
+- `status`: Estado (`active`, `paid-off`, `deferred`)
+- `description`: Notas adicionales
+
+**Flujo de Préstamos**:
+1. Usuario crea préstamo con datos básicos (acreedor, monto, interés, fechas)
+2. Sistema calcula y muestra balance pendiente y pagos realizados
+3. Préstamo aparece en dashboard y resúmenes financieros
+4. Usuario puede actualizar estado cuando paga o modifica términos
+5. Sistema incluye préstamos en cálculos de salud financiera
+
+### 2. Servicio de Límites de Gasto (SpendingLimitService)
+
+**Propósito**: Establecer y controlar límites de gasto mensuales por categoría o en general, con sistema de alertas y seguimiento de cumplimiento.
+
+**API Endpoints**:
+- `spendingLimitService.create()` - Crear nuevo límite de gasto
+- `spendingLimitService.getAll()` - Listar todos los límites (con paginación)
+- `spendingLimitService.getById()` - Obtener un límite específico por ID
+- `spendingLimitService.getForMonth()` - Obtener límite para un mes específico
+- `spendingLimitService.getMonthStatus()` - Obtener estado actual de gastos vs límite
+- `spendingLimitService.update()` - Actualizar límite
+- `spendingLimitService.delete()` - Eliminar límite
+
+**Campos de Límite de Gasto**:
+- `category_id`: ID de categoría (opcional, si es límite general dejar vacío)
+- `limit_amount`: Monto máximo permitido
+- `currency`: Moneda del límite
+- `year` / `month`: Periodo al que aplica el límite
+- `status`: Estado (`active`, `inactive`)
+- `description`: Descripción opcional
+
+**Estado de Seguimiento**:
+- `limit_amount`: Límite configurado para el mes
+- `spent_amount`: Cantidad gastada en el periodo
+- `remaining_amount`: Monto restante disponible
+- `percentage`: Porcentaje del límite utilizado
+- `status`: Estado (`ok`, `warning`, `exceeded`)
+
+**Flujo de Límites de Gasto**:
+1. Usuario configura límite mensual por categoría o global
+2. Sistema rastrea gastos en tiempo real durante el mes
+3. Se muestra estado actual: cuánto se ha gastado, cuánto queda
+4. Alertas visuales cuando se acerca al límite o lo excede
+5. Resumen mensual de cumplimiento de límites
+
+### 3. N8n Chat Widget - Asistente Virtual de Finanzas
+
+**Propósito**: Integración de un chatbot de IA para consultas financieras y recomendaciones personalizadas basadas en datos del usuario.
+
+**Componentes**:
+- `N8nChatWidget.tsx` - Widget de chat en todas las páginas protegidas
+- `chatContextService.ts` - Servicio para obtener contexto financiero del usuario
+
+**Funcionalidades**:
+- Consultas sobre estado financiero actual
+- Análisis de hábitos de gasto
+- Recomendaciones personalizadas de ahorro
+- Interpretación de reportes y métricas
+- Asistencia en la toma de decisiones financieras
+
+**Contexto Financiero Disponible**:
+- `current_month`: Ingresos, gastos, ahorros del mes actual
+- `total_balance`: Balance total de todas las cuentas
+- `savings_goals`: Estado de todas las metas de ahorro
+- `historical_average`: Promedios históricos de ingresos/gastos
+- `financial_health`: Indicadores de salud financiera (ratio de gastos a ingresos, fondo de emergencia, etc.)
+
+**Configuración**:
+- Webhook URL configurada en `.env` como `VITE_N8N_WEBHOOK_URL`
+- No disponible en páginas públicas (landing/auth)
+- Soporte multilenguaje (actualmente en español)
+- Historial de conversación persistente

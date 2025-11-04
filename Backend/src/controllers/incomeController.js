@@ -308,7 +308,8 @@ const IncomeController = {
                                 income_date: paymentDateStr,
                                 description: `Generado desde: ${schedule.name} - ${schedule.frequency}`,
                                 account_id: schedule.account_id,
-                                is_confirmed: false // Generated incomes need confirmation
+                                is_confirmed: false, // Generated incomes need confirmation
+                                is_salary: true // Marcar como ingreso de salario (no es extra)
                             };
                             
                             const createdIncome = await Income.create(newIncome);

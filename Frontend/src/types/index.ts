@@ -65,6 +65,7 @@ export interface Income {
   is_confirmed: boolean
   income_date: string
   description?: string
+  is_salary?: boolean // true si es un ingreso de salario fijo, false si es extra
   created_at: string
   updated_at: string
 }

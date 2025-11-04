@@ -294,8 +294,8 @@ const ExpensePage = () => {
         </div>
       )}
 
-      <div className="grid gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 auto-rows-max">
-        <Card>
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="hover:shadow-sm transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Total Gastos</CardTitle>
           </CardHeader>
@@ -303,7 +303,7 @@ const ExpensePage = () => {
             <div className="text-xl sm:text-2xl font-bold truncate">{formatCurrency(totalExpenses)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:shadow-sm transition-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Necesarios</CardTitle>
           </CardHeader>
@@ -311,24 +311,24 @@ const ExpensePage = () => {
             <div className="text-xl sm:text-2xl font-bold text-red-600 truncate">{formatCurrency(necessaryTotal)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="hover:shadow-sm transition-shadow">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Innecesarios</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Innecesarios</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{formatCurrency(unnecessaryTotal)}</div>
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600 truncate">{formatCurrency(unnecessaryTotal)}</div>
           </CardContent>
         </Card>
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button onClick={() => setShowForm(!showForm)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Gasto
           </Button>
           <Select value={filterType} onValueChange={(value) => setFilterType(value as 'all' | 'necessary' | 'unnecessary')}>
-            <SelectTrigger className="w-full sm:w-auto min-w-[180px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Tipo de gasto" />
             </SelectTrigger>
             <SelectContent>
@@ -340,126 +340,135 @@ const ExpensePage = () => {
         </div>
 
         {/* Filter Controls */}
-        <div className="bg-muted p-4 rounded-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-medium text-sm">Filtros</h3>
-            <button
-              onClick={() => setUseCustomDateRange(!useCustomDateRange)}
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              {useCustomDateRange ? 'Usar Mes/Año' : 'Usar Rango Personalizado'}
-            </button>
-          </div>
+        <Card className="border-primary/20">
+          <CardContent className="p-3 sm:p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h3 className="font-medium text-xs sm:text-sm">Filtros</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setUseCustomDateRange(!useCustomDateRange)}
+                className="text-xs font-medium text-primary hover:bg-primary/10 w-full sm:w-auto"
+              >
+                {useCustomDateRange ? 'Usar Mes/Año' : 'Usar Rango Personalizado'}
+              </Button>
+            </div>
 
-          {!useCustomDateRange ? (
-            <div className="grid gap-3 md:grid-cols-3">
+            {!useCustomDateRange ? (
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <Label htmlFor="filter-month" className="text-xs">Mes</Label>
+                  <Select value={filterMonth.toString()} onValueChange={(value) => setFilterMonth(parseInt(value))}>
+                    <SelectTrigger className="h-9 sm:h-10 mt-1 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Todos los meses</SelectItem>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+                        <SelectItem key={month} value={month.toString()}>
+                          {new Date(2024, month - 1).toLocaleDateString('es-ES', { month: 'long' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="filter-year" className="text-xs">Año</Label>
+                  <Select value={filterYear.toString()} onValueChange={(value) => setFilterYear(parseInt(value))}>
+                    <SelectTrigger className="h-9 sm:h-10 mt-1 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="filter-start" className="text-xs">Fecha Inicio</Label>
+                  <div className="mt-1">
+                    <DatePicker
+                      value={filterStartDate}
+                      onChange={setFilterStartDate}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="filter-end" className="text-xs">Fecha Fin</Label>
+                  <div className="mt-1">
+                    <DatePicker
+                      value={filterEndDate}
+                      onChange={setFilterEndDate}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sort Controls */}
+            <div className="border-t pt-3 grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2">
               <div>
-                <Label htmlFor="filter-month" className="text-xs">Mes</Label>
-                <Select value={filterMonth.toString()} onValueChange={(value) => setFilterMonth(parseInt(value))}>
-                  <SelectTrigger className="h-8">
+                <Label htmlFor="sort-by" className="text-xs">Ordenar Por</Label>
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
+                  <SelectTrigger className="h-9 sm:h-10 mt-1 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0">Todos los meses</SelectItem>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-                      <SelectItem key={month} value={month.toString()}>
-                        {new Date(2024, month - 1).toLocaleDateString('es-ES', { month: 'long' })}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="date">Fecha</SelectItem>
+                    <SelectItem value="amount">Monto</SelectItem>
+                    <SelectItem value="category">Categoría</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="filter-year" className="text-xs">Año</Label>
-                <Select value={filterYear.toString()} onValueChange={(value) => setFilterYear(parseInt(value))}>
-                  <SelectTrigger className="h-8">
+                <Label htmlFor="sort-order" className="text-xs">Orden</Label>
+                <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as SortOrder)}>
+                  <SelectTrigger className="h-9 sm:h-10 mt-1 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="desc">Descendente</SelectItem>
+                    <SelectItem value="asc">Ascendente</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <Label htmlFor="filter-start" className="text-xs">Fecha Inicio</Label>
-                <DatePicker
-                  value={filterStartDate}
-                  onChange={setFilterStartDate}
-                />
-              </div>
-              <div>
-                <Label htmlFor="filter-end" className="text-xs">Fecha Fin</Label>
-                <DatePicker
-                  value={filterEndDate}
-                  onChange={setFilterEndDate}
-                />
-              </div>
-            </div>
-          )}
 
-          {/* Sort Controls */}
-          <div className="border-t pt-3 grid gap-3 md:grid-cols-2">
-            <div>
-              <Label htmlFor="sort-by" className="text-xs">Ordenar Por</Label>
-              <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortBy)}>
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date">Fecha</SelectItem>
-                  <SelectItem value="amount">Monto</SelectItem>
-                  <SelectItem value="category">Categoría</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="sort-order" className="text-xs">Orden</Label>
-              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="desc">Descendente</SelectItem>
-                  <SelectItem value="asc">Ascendente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Mostrando {filteredExpenses.length} de {expenses.length} gastos
-          </p>
-        </div>
+            <p className="text-xs text-muted-foreground">
+              Mostrando {filteredExpenses.length} de {expenses.length} gastos
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {showForm && (
         <Card className="animate-slide-in-up border-2 border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-lg sm:text-xl">{editingId ? 'Editar' : 'Nuevo'} Gasto</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">{editingId ? 'Editar' : 'Nuevo'} Gasto</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="description">Descripción</Label>
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+              <div className="w-full">
+                <Label htmlFor="description" className="text-sm">Descripción</Label>
                 <Input
                   id="description"
                   placeholder="Ej: Almuerzo"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="mt-1 w-full"
                 />
               </div>
 
-              <div>
-                <Label htmlFor="type">Tipo</Label>
+              <div className="w-full">
+                <Label htmlFor="type" className="text-sm">Tipo</Label>
                 <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value as 'fixed' | 'variable' })}>
-                  <SelectTrigger>
+                  <SelectTrigger className="mt-1 w-full">
                     <SelectValue placeholder="Seleccionar tipo" />
                   </SelectTrigger>
                   <SelectContent>
@@ -469,11 +478,11 @@ const ExpensePage = () => {
                 </Select>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label htmlFor="category_id">Categoría</Label>
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 w-full">
+                <div className="w-full">
+                  <Label htmlFor="category_id" className="text-sm">Categoría</Label>
                   <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
-                    <SelectTrigger>
+                    <SelectTrigger className="mt-1 w-full">
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                     <SelectContent>
@@ -487,22 +496,23 @@ const ExpensePage = () => {
                   </Select>
                 </div>
 
-                <div>
-                  <Label htmlFor="amount">Monto</Label>
+                <div className="w-full">
+                  <Label htmlFor="amount" className="text-sm">Monto</Label>
                   <Input
                     id="amount"
                     type="number"
                     step="0.01"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: parseDecimalAmount(e.target.value) })}
+                    className="mt-1 w-full"
                     required
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor="currency_id">Moneda</Label>
+                <div className="w-full">
+                  <Label htmlFor="currency_id" className="text-sm">Moneda</Label>
                   <Select value={formData.currency_id} onValueChange={(value) => setFormData({ ...formData, currency_id: value })}>
-                    <SelectTrigger>
+                    <SelectTrigger className="mt-1 w-full">
                       <SelectValue placeholder="Seleccionar moneda" />
                     </SelectTrigger>
                     <SelectContent>
@@ -516,18 +526,20 @@ const ExpensePage = () => {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="expense_date">Fecha</Label>
-                  <DatePicker
-                    value={formData.expense_date}
-                    onChange={(date) => setFormData({ ...formData, expense_date: date })}
-                  />
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 w-full">
+                <div className="w-full">
+                  <Label htmlFor="expense_date" className="text-sm">Fecha</Label>
+                  <div className="mt-1">
+                    <DatePicker
+                      value={formData.expense_date}
+                      onChange={(date) => setFormData({ ...formData, expense_date: date })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="account_id">Cuenta</Label>
+                <div className="w-full">
+                  <Label htmlFor="account_id" className="text-sm">Cuenta</Label>
                   <Select value={formData.account_id} onValueChange={(value) => setFormData({ ...formData, account_id: value })}>
-                    <SelectTrigger>
+                    <SelectTrigger className="mt-1 w-full">
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                     <SelectContent>
@@ -542,11 +554,11 @@ const ExpensePage = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto transition-all duration-300 hover:scale-105">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t">
+                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto">
                   Cancelar
                 </Button>
-                <Button type="submit" className="w-full sm:w-auto transition-all duration-300 hover:scale-105">{editingId ? 'Actualizar' : 'Crear'} Gasto</Button>
+                <Button type="submit" className="w-full sm:w-auto">{editingId ? 'Actualizar' : 'Crear'} Gasto</Button>
               </div>
             </form>
           </CardContent>

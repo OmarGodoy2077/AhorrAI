@@ -10,12 +10,12 @@ export const N8nChatWidget = () => {
 	const location = useLocation();
 	const chatInitializedRef = useRef(false);
 
-	// Don't render chat on landing page (/) or auth page (/auth)
-	if (location.pathname === '/' || location.pathname === '/auth') {
-		return null;
-	}
-
 	useEffect(() => {
+		// Don't initialize chat on landing page (/) or auth page (/auth)
+		if (location.pathname === '/' || location.pathname === '/auth') {
+			return;
+		}
+
 		// Prevent multiple initializations (fixes "already an app instance mounted" error)
 		if (chatInitializedRef.current || chatInitialized) {
 			console.log('💬 N8n Chat Widget: Already initialized, skipping...');
@@ -142,6 +142,11 @@ export const N8nChatWidget = () => {
 		}
 
 	}, [location.pathname]);
+
+	// Don't render chat on landing page (/) or auth page (/auth)
+	if (location.pathname === '/' || location.pathname === '/auth') {
+		return null;
+	}
 
 	// The chat widget will render in this target element
 	return (

@@ -146,8 +146,9 @@ export const MainLayout = () => {
       {/* Mobile menu overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity duration-200"
           onClick={() => setIsMobileMenuOpen(false)}
+          aria-label="Cerrar menú"
         />
       )}
     </div>
